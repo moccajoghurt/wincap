@@ -48,7 +48,6 @@ Environment:
 #include <ip2string.h>
 
 #include "inspect.h"
-#include "share.h"
 
 #define INITGUID
 #include <guiddef.h>
@@ -807,7 +806,7 @@ DriverEntry(
    WDFDRIVER driver;
    WDFDEVICE device;
    HANDLE threadHandle;
-   DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ADDED INSPECT DRIVER\n");
+
    // Request NX Non-Paged Pool when available
    ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
 

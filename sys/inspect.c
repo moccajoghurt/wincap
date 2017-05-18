@@ -36,6 +36,7 @@ Environment:
 
 #include "inspect.h"
 #include "utils.h"
+#include "share.h"
 
 #if(NTDDI_VERSION >= NTDDI_WIN7)
 
@@ -960,6 +961,9 @@ TLInspectCloneReinjectOutbound(
    {
       goto Exit;
    }
+
+   //share cloned buffer list 
+   shareClonedNetBufferList(clonedNetBufferList);
 
    sendArgs.remoteAddress = (UINT8*)(&packet->remoteAddr);
    sendArgs.remoteScopeId = packet->remoteScopeId;

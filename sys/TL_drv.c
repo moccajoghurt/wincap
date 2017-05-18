@@ -699,6 +699,8 @@ TLInspectEvtDriverUnload(
    KLOCK_QUEUE_HANDLE connListLockHandle;
    KLOCK_QUEUE_HANDLE packetQueueLockHandle;
 
+   DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "UNLOADING INSPECT DRIVER\n");
+
    UNREFERENCED_PARAMETER(driverObject);
 
    KeAcquireInStackQueuedSpinLock(
@@ -796,6 +798,7 @@ Exit:
    return status;
 }
 
+// TODO: remove registry parameter and read all packets
 NTSTATUS
 DriverEntry(
    DRIVER_OBJECT* driverObject,
@@ -806,6 +809,7 @@ DriverEntry(
    WDFDRIVER driver;
    WDFDEVICE device;
    HANDLE threadHandle;
+   DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ADDED INSPECT DRIVER\n");
 
    // Request NX Non-Paged Pool when available
    ExInitializeDriverRuntime(DrvRtPoolNxOptIn);

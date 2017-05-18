@@ -28,5 +28,30 @@
     <ClCompile Include="utils.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="share.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="inspect.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="share.h" />
+    <ClInclude Include="utils.h" />
+    <ClInclude Include="inspect.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="share.h" />
+    <ClInclude Include="utils.h" />
+    <ClInclude Include="inspect.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="share.h" />
+    <ClInclude Include="utils.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="*.inf">
+      <Filter>Driver Files</Filter>
+    </Inf>
   </ItemGroup>
 </Project>

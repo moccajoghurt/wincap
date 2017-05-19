@@ -8,6 +8,4 @@ This file is responsible for sharing the packet data with the usermode
 
 NTSTATUS shareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList);
 
-//this is a test change
-
 #endif // _TL_SHARE_H_

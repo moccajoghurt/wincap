@@ -267,7 +267,7 @@ TLInspectAddFilter(
           IsEqualGUID(layerKey, &FWPM_LAYER_INBOUND_TRANSPORT_V4) ||
           IsEqualGUID(layerKey, &FWPM_LAYER_OUTBOUND_TRANSPORT_V4))
       {
-         filterConditions[conditionIndex].conditionValue.type = FWP_UINT32;
+         filterConditions[conditionIndex].conditionValue.type = FWP_UINT32; // here are ipv4 / ipv6 the conditions defined
          filterConditions[conditionIndex].conditionValue.uint32 = 
             *(UINT32*)remoteAddr;
       }
@@ -838,6 +838,8 @@ DriverEntry(
       goto Exit;
    }
 
+   // configInspectRemoteAddrV4
+   // configInspectRemoteAddrV6
    status = TLInspectLoadConfig(gParametersKey);
 
    if (!NT_SUCCESS(status))

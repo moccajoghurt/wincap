@@ -11,7 +11,7 @@
     ClassGuid   = {57465043-616C-6C6F-7574-5F636C617373}
     Provider    = %ProviderString%
     CatalogFile = Inspect.cat
-    DriverVer=05/18/2017,17.58.23.215
+    DriverVer=05/19/2017,14.20.41.570
 
 [SourceDisksNames]
    1 = %InspectDisk%,,,""

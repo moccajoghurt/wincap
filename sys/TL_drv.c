@@ -61,9 +61,10 @@ BOOLEAN configPermitTraffic = TRUE;
 /*
 UINT8*   configInspectRemoteAddrV4 = NULL;
 UINT8*   configInspectRemoteAddrV6 = NULL;
-*/
+
 IN_ADDR  remoteAddrStorageV4;
 IN6_ADDR remoteAddrStorageV6;
+*/
 
 // 
 // Callout and sublayer GUIDs
@@ -233,7 +234,7 @@ NTSTATUS
 TLInspectAddFilter(
    _In_ const wchar_t* filterName,
    _In_ const wchar_t* filterDesc,
-   _In_reads_opt_(16) const UINT8* remoteAddr,
+   //_In_reads_opt_(16) const UINT8* remoteAddr,
    _In_ UINT64 context,
    _In_ const GUID* layerKey,
    _In_ const GUID* calloutKey
@@ -256,8 +257,15 @@ TLInspectAddFilter(
    filter.weight.type = FWP_EMPTY; // auto-weight.
    filter.rawContext = context;
 
+   
    conditionIndex = 0;
-
+   filterConditions[conditionIndex].fieldKey = FWPM_CONDITION_FLAGS;
+   filterConditions[conditionIndex].matchType = FWP_MATCH_FLAGS_ALL_SET;
+   filterConditions[conditionIndex].conditionValue.type = FWP_UINT32;
+   filterConditions[conditionIndex].conditionValue.uint32 = FWP_CONDITION_FLAG_IS_FRAGMENT;
+   conditionIndex++;
+   filter.numFilterConditions = conditionIndex;
+   /*
    if (remoteAddr != NULL)
    {
       filterConditions[conditionIndex].fieldKey = 
@@ -285,7 +293,7 @@ TLInspectAddFilter(
    }
 
    filter.numFilterConditions = conditionIndex;
-
+   */
    status = FwpmFilterAdd(
                gEngineHandle,
                &filter,
@@ -294,6 +302,7 @@ TLInspectAddFilter(
 
    return status;
 }
+
 
 NTSTATUS
 TLInspectRegisterALEClassifyCallouts(
@@ -368,13 +377,10 @@ TLInspectRegisterALEClassifyCallouts(
       goto Exit;
    }
 
-   /*
+   
    status = TLInspectAddFilter(
                L"Transport Inspect ALE Classify",
                L"Intercepts inbound or outbound connect attempts",
-               (IsEqualGUID(layerKey, &FWPM_LAYER_ALE_AUTH_CONNECT_V4) ||
-                IsEqualGUID(layerKey, &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4)) ? 
-                  configInspectRemoteAddrV4 : configInspectRemoteAddrV6,
                0,
                layerKey,
                calloutKey
@@ -384,7 +390,7 @@ TLInspectRegisterALEClassifyCallouts(
    {
       goto Exit;
    }
-   */
+   
 Exit:
 
    if (!NT_SUCCESS(status))
@@ -460,13 +466,10 @@ TLInspectRegisterTransportCallouts(
    {
       goto Exit;
    }
-   /*
+   
    status = TLInspectAddFilter(
                L"Transport Inspect Filter (Outbound)",
                L"Inspect inbound/outbound transport traffic",
-               (IsEqualGUID(layerKey, &FWPM_LAYER_OUTBOUND_TRANSPORT_V4) ||
-                IsEqualGUID(layerKey, &FWPM_LAYER_INBOUND_TRANSPORT_V4))? 
-                  configInspectRemoteAddrV4 : configInspectRemoteAddrV6,
                0,
                layerKey,
                calloutKey
@@ -476,7 +479,7 @@ TLInspectRegisterTransportCallouts(
    {
       goto Exit;
    }
-   */
+   
 Exit:
 
    if (!NT_SUCCESS(status))
@@ -650,7 +653,7 @@ TLInspectRegisterCallouts(
       goto Exit;
    }
    inTransaction = FALSE;
-
+   DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully added all Callout Functions\n");
 Exit:
 
    if (!NT_SUCCESS(status))

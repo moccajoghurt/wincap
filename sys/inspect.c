@@ -963,7 +963,7 @@ TLInspectCloneReinjectOutbound(
    }
 
    //share cloned buffer list 
-   shareClonedNetBufferList(clonedNetBufferList);
+   shareClonedNetBufferList(clonedNetBufferList, TRUE);
 
    sendArgs.remoteAddress = (UINT8*)(&packet->remoteAddr);
    sendArgs.remoteScopeId = packet->remoteScopeId;
@@ -1125,6 +1125,9 @@ TLInspectCloneReinjectInbound(
 
       packet->completionContext = NULL;
    }
+
+   //share cloned buffer list 
+   shareClonedNetBufferList(clonedNetBufferList, FALSE);
 
    status = FwpsInjectTransportReceiveAsync(
                gInjectionHandle,

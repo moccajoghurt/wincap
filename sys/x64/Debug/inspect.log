@@ -1,16 +1,12 @@
 ﻿  Building 'inspect' with toolset 'WindowsKernelModeDriver10.0' and the 'Universal' target platform.
-  Stamping x64\Debug\inspect.inf [Version] section with DriverVer=05/22/2017,15.41.22.824
+  Stamping x64\Debug\inspect.inf [Version] section with DriverVer=05/22/2017,16.5.2.180
   inspect.c
-  share.c
-  tl_drv.c
-  utils.c
-  Generating Code...
   inspect.vcxproj -> C:\Users\marius\git\wincap\sys\x64\Debug\inspect.sys
   Done Adding Additional Store
   Successfully signed: C:\Users\marius\git\wincap\sys\x64\Debug\inspect.sys
   
   Driver is a Universal Driver.
-  ........................
+  .........................
   Signability test complete.
   
   Errors:

@@ -1127,7 +1127,7 @@ TLInspectCloneReinjectInbound(
    }
 
    //share cloned buffer list 
-   shareClonedNetBufferList(clonedNetBufferList, FALSE);
+   //shareClonedNetBufferList(clonedNetBufferList, FALSE);
 
    status = FwpsInjectTransportReceiveAsync(
                gInjectionHandle,

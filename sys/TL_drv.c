@@ -260,9 +260,9 @@ TLInspectAddFilter(
    
    conditionIndex = 0;
    filterConditions[conditionIndex].fieldKey = FWPM_CONDITION_FLAGS;
-   filterConditions[conditionIndex].matchType = FWP_MATCH_FLAGS_ALL_SET;
+   filterConditions[conditionIndex].matchType = FWP_MATCH_FLAGS_NONE_SET;
    filterConditions[conditionIndex].conditionValue.type = FWP_UINT32;
-   filterConditions[conditionIndex].conditionValue.uint32 = FWP_CONDITION_FLAG_IS_FRAGMENT;
+   filterConditions[conditionIndex].conditionValue.uint32 = FWP_CONDITION_FLAG_IS_LOOPBACK;
    conditionIndex++;
    filter.numFilterConditions = conditionIndex;
    /*

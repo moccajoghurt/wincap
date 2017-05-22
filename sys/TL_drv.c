@@ -58,10 +58,10 @@ Environment:
 //
 
 BOOLEAN configPermitTraffic = TRUE;
-
+/*
 UINT8*   configInspectRemoteAddrV4 = NULL;
 UINT8*   configInspectRemoteAddrV6 = NULL;
-
+*/
 IN_ADDR  remoteAddrStorageV4;
 IN6_ADDR remoteAddrStorageV6;
 
@@ -178,6 +178,7 @@ void* gThreadObj;
 DRIVER_INITIALIZE DriverEntry;
 EVT_WDF_DRIVER_UNLOAD TLInspectEvtDriverUnload;
 
+/*
 NTSTATUS
 TLInspectLoadConfig(
    _In_ const WDFKEY key
@@ -226,6 +227,7 @@ TLInspectLoadConfig(
 
    return status;
 }
+*/
 
 NTSTATUS
 TLInspectAddFilter(
@@ -366,6 +368,7 @@ TLInspectRegisterALEClassifyCallouts(
       goto Exit;
    }
 
+   /*
    status = TLInspectAddFilter(
                L"Transport Inspect ALE Classify",
                L"Intercepts inbound or outbound connect attempts",
@@ -381,7 +384,7 @@ TLInspectRegisterALEClassifyCallouts(
    {
       goto Exit;
    }
-
+   */
 Exit:
 
    if (!NT_SUCCESS(status))
@@ -457,7 +460,7 @@ TLInspectRegisterTransportCallouts(
    {
       goto Exit;
    }
-
+   /*
    status = TLInspectAddFilter(
                L"Transport Inspect Filter (Outbound)",
                L"Inspect inbound/outbound transport traffic",
@@ -473,7 +476,7 @@ TLInspectRegisterTransportCallouts(
    {
       goto Exit;
    }
-
+   */
 Exit:
 
    if (!NT_SUCCESS(status))
@@ -550,99 +553,96 @@ TLInspectRegisterCallouts(
       goto Exit;
    }
 
-   if (configInspectRemoteAddrV4 != NULL)
-   {
-      status = TLInspectRegisterALEClassifyCallouts(
-                  &FWPM_LAYER_ALE_AUTH_CONNECT_V4,
-                  &TL_INSPECT_ALE_CONNECT_CALLOUT_V4,
-                  deviceObject,
-                  &gAleConnectCalloutIdV4
-                  );
-      if (!NT_SUCCESS(status))
-      {
-         goto Exit;
-      }
+	// register ipv4 callouts
+	status = TLInspectRegisterALEClassifyCallouts(
+				&FWPM_LAYER_ALE_AUTH_CONNECT_V4,
+				&TL_INSPECT_ALE_CONNECT_CALLOUT_V4,
+				deviceObject,
+				&gAleConnectCalloutIdV4
+				);
+	if (!NT_SUCCESS(status))
+	{
+		goto Exit;
+	}
 
-      status = TLInspectRegisterALEClassifyCallouts(
-                  &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
-                  &TL_INSPECT_ALE_RECV_ACCEPT_CALLOUT_V4,
-                  deviceObject,
-                  &gAleRecvAcceptCalloutIdV4
-                  );
-      if (!NT_SUCCESS(status))
-      {
-         goto Exit;
-      }
+	status = TLInspectRegisterALEClassifyCallouts(
+				&FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
+				&TL_INSPECT_ALE_RECV_ACCEPT_CALLOUT_V4,
+				deviceObject,
+				&gAleRecvAcceptCalloutIdV4
+				);
+	if (!NT_SUCCESS(status))
+	{
+		goto Exit;
+	}
 
-      status = TLInspectRegisterTransportCallouts(
-                  &FWPM_LAYER_OUTBOUND_TRANSPORT_V4,
-                  &TL_INSPECT_OUTBOUND_TRANSPORT_CALLOUT_V4,
-                  deviceObject,
-                  &gOutboundTlCalloutIdV4
-                  );
-      if (!NT_SUCCESS(status))
-      {
-         goto Exit;
-      }
+	status = TLInspectRegisterTransportCallouts(
+				&FWPM_LAYER_OUTBOUND_TRANSPORT_V4,
+				&TL_INSPECT_OUTBOUND_TRANSPORT_CALLOUT_V4,
+				deviceObject,
+				&gOutboundTlCalloutIdV4
+				);
+	if (!NT_SUCCESS(status))
+	{
+		goto Exit;
+	}
 
-      status = TLInspectRegisterTransportCallouts(
-                  &FWPM_LAYER_INBOUND_TRANSPORT_V4,
-                  &TL_INSPECT_INBOUND_TRANSPORT_CALLOUT_V4,
-                  deviceObject,
-                  &gInboundTlCalloutIdV4
-                  );
-      if (!NT_SUCCESS(status))
-      {
-         goto Exit;
-      }
-   }
+	status = TLInspectRegisterTransportCallouts(
+				&FWPM_LAYER_INBOUND_TRANSPORT_V4,
+				&TL_INSPECT_INBOUND_TRANSPORT_CALLOUT_V4,
+				deviceObject,
+				&gInboundTlCalloutIdV4
+				);
+	if (!NT_SUCCESS(status))
+	{
+		goto Exit;
+	}
+   
+	// register ipv6 callouts
+    status = TLInspectRegisterALEClassifyCallouts(
+                &FWPM_LAYER_ALE_AUTH_CONNECT_V6,
+                &TL_INSPECT_ALE_CONNECT_CALLOUT_V6,
+                deviceObject,
+                &gAleConnectCalloutIdV6
+                );
+    if (!NT_SUCCESS(status))
+    {
+        goto Exit;
+    }
 
-   if (configInspectRemoteAddrV6 != NULL)
-   {
-      status = TLInspectRegisterALEClassifyCallouts(
-                  &FWPM_LAYER_ALE_AUTH_CONNECT_V6,
-                  &TL_INSPECT_ALE_CONNECT_CALLOUT_V6,
-                  deviceObject,
-                  &gAleConnectCalloutIdV6
-                  );
-      if (!NT_SUCCESS(status))
-      {
-         goto Exit;
-      }
+    status = TLInspectRegisterALEClassifyCallouts(
+                &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
+                &TL_INSPECT_ALE_RECV_ACCEPT_CALLOUT_V6,
+                deviceObject,
+                &gAleRecvAcceptCalloutIdV6
+                );
+    if (!NT_SUCCESS(status))
+    {
+        goto Exit;
+    }
 
-      status = TLInspectRegisterALEClassifyCallouts(
-                  &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
-                  &TL_INSPECT_ALE_RECV_ACCEPT_CALLOUT_V6,
-                  deviceObject,
-                  &gAleRecvAcceptCalloutIdV6
-                  );
-      if (!NT_SUCCESS(status))
-      {
-         goto Exit;
-      }
+    status = TLInspectRegisterTransportCallouts(
+                &FWPM_LAYER_OUTBOUND_TRANSPORT_V6,
+                &TL_INSPECT_OUTBOUND_TRANSPORT_CALLOUT_V6,
+                deviceObject,
+                &gOutboundTlCalloutIdV6
+                );
+    if (!NT_SUCCESS(status))
+    {
+        goto Exit;
+    }
 
-      status = TLInspectRegisterTransportCallouts(
-                  &FWPM_LAYER_OUTBOUND_TRANSPORT_V6,
-                  &TL_INSPECT_OUTBOUND_TRANSPORT_CALLOUT_V6,
-                  deviceObject,
-                  &gOutboundTlCalloutIdV6
-                  );
-      if (!NT_SUCCESS(status))
-      {
-         goto Exit;
-      }
-
-      status = TLInspectRegisterTransportCallouts(
-                  &FWPM_LAYER_INBOUND_TRANSPORT_V6,
-                  &TL_INSPECT_INBOUND_TRANSPORT_CALLOUT_V6,
-                  deviceObject,
-                  &gInboundTlCalloutIdV6
-                  );
-      if (!NT_SUCCESS(status))
-      {
-         goto Exit;
-      }
-   }
+    status = TLInspectRegisterTransportCallouts(
+                &FWPM_LAYER_INBOUND_TRANSPORT_V6,
+                &TL_INSPECT_INBOUND_TRANSPORT_CALLOUT_V6,
+                deviceObject,
+                &gInboundTlCalloutIdV6
+                );
+    if (!NT_SUCCESS(status))
+    {
+        goto Exit;
+    }
+   
 
    status = FwpmTransactionCommit(gEngineHandle);
    if (!NT_SUCCESS(status))
@@ -826,6 +826,7 @@ DriverEntry(
       goto Exit;
    }
 
+   /*
    status = WdfDriverOpenParametersRegistryKey(
                driver,
                KEY_READ,
@@ -840,6 +841,7 @@ DriverEntry(
 
    // configInspectRemoteAddrV4
    // configInspectRemoteAddrV6
+   // will be filled with values in this function
    status = TLInspectLoadConfig(gParametersKey);
 
    if (!NT_SUCCESS(status))
@@ -847,13 +849,15 @@ DriverEntry(
       status = STATUS_DEVICE_CONFIGURATION_ERROR;
       goto Exit;
    }
-
+   */
+   /*
    if ((configInspectRemoteAddrV4 == NULL) && 
        (configInspectRemoteAddrV6 == NULL))
    {
       status = STATUS_DEVICE_CONFIGURATION_ERROR;
       goto Exit;
    }
+   */
 
    status = FwpsInjectionHandleCreate(
                AF_UNSPEC,

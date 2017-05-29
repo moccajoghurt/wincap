@@ -274,6 +274,25 @@ WCP_NetworkInjectionComplete(
 	return;
 }
 
+NTSTATUS WCP_shareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOLEAN isInbound) {
+	NTSTATUS status = STATUS_SUCCESS;
+
+	NET_BUFFER* pNetBuffer;
+	pNetBuffer = NET_BUFFER_LIST_FIRST_NB(clonedNetBufferList);
+
+	while (pNetBuffer) {
+		ULONG length = pNetBuffer->DataLength;
+		if (isInbound) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Receiving package with the length: %lu\n", length);
+		}
+		else {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Sending package with the length: %lu\n", length);
+		}
+		pNetBuffer = pNetBuffer->Next;
+	}
+	return status;
+}
+
 //
 // Callout driver functions
 //
@@ -391,6 +410,9 @@ WCP_NetworkClassify(
 	injectionState = FwpsQueryPacketInjectionState(bIPv4 ? g_InjectionHandle_IPv4 : g_InjectionHandle_IPv6,
 		pNetBufferList,
 		NULL);
+	//
+	// We don't re-inspect packets that we've inspected earlier.
+	//
 	if (injectionState == FWPS_PACKET_INJECTED_BY_SELF ||
 		injectionState == FWPS_PACKET_PREVIOUSLY_INJECTED_BY_SELF)
 	{
@@ -489,11 +511,11 @@ WCP_NetworkClassify(
 	{
 		bytesRetreatedEthernet = 0;
 
-
 		goto Exit_Packet_Cloned;
 	}
 
 	pNetBuffer = NET_BUFFER_LIST_FIRST_NB(pClonedNetBufferList);
+	/*
 	while (pNetBuffer)
 	{
 		pContiguousData = NdisGetDataBuffer(pNetBuffer,
@@ -515,16 +537,16 @@ WCP_NetworkClassify(
 			}
 			else
 			{
-				// this needs to be taken care of
-				/*
 				RtlZeroMemory(pContiguousData, ETHER_ADDR_LEN * 2);
 				((PETHER_HEADER)pContiguousData)->ether_type = bIPv4 ? RtlUshortByteSwap(ETHERTYPE_IP) : RtlUshortByteSwap(ETHERTYPE_IPV6);
-				*/
 			}
 		}
 
 		pNetBuffer = pNetBuffer->Next;
 	}
+	*/
+
+	WCP_shareClonedNetBufferList(pClonedNetBufferList, bInbound);
 
 	// Send the loopback packets data to the user-mode code.
 	// Can't assert this because a sleep could happen, detaching the adapter and making this pointer invalid.

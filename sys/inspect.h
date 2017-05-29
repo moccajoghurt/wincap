@@ -122,7 +122,7 @@ typedef struct _ICMP4_HEADER
 #if(NTDDI_VERSION >= NTDDI_WIN7)
 
 void
-NPF_NetworkClassify(
+WCP_NetworkClassify(
 	_In_ const FWPS_INCOMING_VALUES* inFixedValues,
 	_In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
 	_Inout_opt_ void* layerData,
@@ -135,7 +135,7 @@ NPF_NetworkClassify(
 #else /// (NTDDI_VERSION >= NTDDI_WIN7)
 
 void
-NPF_NetworkClassify(
+WCP_NetworkClassify(
 	_In_ const FWPS_INCOMING_VALUES* inFixedValues,
 	_In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
 	_Inout_opt_ void* layerData,
@@ -147,21 +147,21 @@ NPF_NetworkClassify(
 #endif /// (NTDDI_VERSION >= NTDDI_WIN7)
 
 NTSTATUS
-NPF_NetworkNotify(
+WCP_NetworkNotify(
 	_In_ FWPS_CALLOUT_NOTIFY_TYPE notifyType,
 	_In_ const GUID* filterKey,
 	_Inout_ const FWPS_FILTER* filter
 );
 
 NTSTATUS
-NPF_AddFilter(
+WCP_AddFilter(
 	_In_ const GUID* layerKey,
 	_In_ const GUID* calloutKey,
 	_In_ const int iFlag
 );
 
 NTSTATUS
-NPF_RegisterCallout(
+WCP_RegisterCallout(
 	_In_ const GUID* layerKey,
 	_In_ const GUID* calloutKey,
 	_Inout_ void* deviceObject,
@@ -169,20 +169,26 @@ NPF_RegisterCallout(
 );
 
 NTSTATUS
-NPF_RegisterCallouts(
+WCP_RegisterCallouts(
 	_Inout_ void* deviceObject
 );
 
 void
-NPF_UnregisterCallouts(
+WCP_UnregisterCallouts(
 );
 
 NTSTATUS
-NPF_InitInjectionHandles(
+WCP_InitInjectionHandles(
 );
 
 NTSTATUS
-NPF_FreeInjectionHandles(
+WCP_FreeInjectionHandles(
+);
+
+NTSTATUS
+WCP_shareClonedNetBufferList(
+	PNET_BUFFER_LIST clonedNetBufferList,
+	BOOLEAN isInbound
 );
 
 #endif // _INSPECT_H_

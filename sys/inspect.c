@@ -47,7 +47,8 @@ typedef struct _DLT_NULL_HEADER
 // Callout and sublayer GUIDs
 //
 
-#ifdef WCP_NPCAP_RUN_IN_WINPCAP_MODE
+
+//#ifdef WCP_NPCAP_RUN_IN_WINPCAP_MODE
 // 2D605B3E-C244-4364-86E8-BD81E6C91B6D
 DEFINE_GUID(
 	WCP_OUTBOUND_IPPACKET_CALLOUT_V4,
@@ -89,7 +90,8 @@ DEFINE_GUID(
 	0x469b,
 	0xb9, 0x9b, 0x3e, 0x88, 0x10, 0x27, 0x5a, 0x71
 );
-#else
+//#else
+/*
 // 2D605B3E-C244-4364-86E8-BD81E6C91B6E
 DEFINE_GUID(
 	WCP_OUTBOUND_IPPACKET_CALLOUT_V4,
@@ -132,7 +134,7 @@ DEFINE_GUID(
 	0xb9, 0x9b, 0x3e, 0x88, 0x10, 0x27, 0x5a, 0x72
 );
 #endif
-
+*/
 
 // 
 // Callout driver global variables
@@ -274,7 +276,7 @@ WCP_NetworkInjectionComplete(
 	return;
 }
 
-NTSTATUS WCP_shareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOLEAN isInbound) {
+NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOLEAN bSelfSent) {
 	NTSTATUS status = STATUS_SUCCESS;
 
 	NET_BUFFER* pNetBuffer;
@@ -282,11 +284,11 @@ NTSTATUS WCP_shareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOL
 
 	while (pNetBuffer) {
 		ULONG length = pNetBuffer->DataLength;
-		if (isInbound) {
-			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Receiving package with the length: %lu\n", length);
+		if (bSelfSent) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Sending package with the length: %lu\n", length);
 		}
 		else {
-			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Sending package with the length: %lu\n", length);
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Receiving package with the length: %lu\n", length);
 		}
 		pNetBuffer = pNetBuffer->Next;
 	}
@@ -546,7 +548,7 @@ WCP_NetworkClassify(
 	}
 	*/
 
-	WCP_shareClonedNetBufferList(pClonedNetBufferList, bInbound);
+	WCP_ShareClonedNetBufferList(pClonedNetBufferList, bSelfSent);
 
 	// Send the loopback packets data to the user-mode code.
 	// Can't assert this because a sleep could happen, detaching the adapter and making this pointer invalid.
@@ -629,8 +631,7 @@ WCP_NetworkNotify(
 NTSTATUS
 WCP_AddFilter(
 	_In_ const GUID* layerKey,
-	_In_ const GUID* calloutKey,
-	_In_ const int iFlag
+	_In_ const GUID* calloutKey
 )
 {
 	
@@ -650,17 +651,21 @@ WCP_AddFilter(
 	filter.rawContext = 0;
 	conditionIndex = 0;
 
-	if (iFlag == 0)
-	{
-		filter.action.type = FWP_ACTION_PERMIT;
-		filter.weight.type = FWP_UINT8;
-		filter.weight.uint8 = 0x5;
-		filterConditions[conditionIndex].fieldKey = FWPM_CONDITION_FLAGS;
-		filterConditions[conditionIndex].matchType = FWP_MATCH_FLAGS_NONE_SET;
-		filterConditions[conditionIndex].conditionValue.type = FWP_UINT32;
-		filterConditions[conditionIndex].conditionValue.uint32 = FWP_CONDITION_FLAG_IS_LOOPBACK;
-		conditionIndex++;
-	}
+	filter.action.type = FWP_ACTION_CALLOUT_INSPECTION;
+	filter.weight.type = FWP_UINT8;
+	filter.weight.uint8 = 0x2;
+	filter.filterCondition = NULL;
+
+	/*filter.action.type = FWP_ACTION_PERMIT;
+	filter.weight.type = FWP_UINT8;
+	filter.weight.uint8 = 0x5;
+	filterConditions[conditionIndex].fieldKey = FWPM_CONDITION_FLAGS;
+	filterConditions[conditionIndex].matchType = FWP_MATCH_FLAGS_NONE_SET;
+	filterConditions[conditionIndex].conditionValue.type = FWP_UINT32;
+	filterConditions[conditionIndex].conditionValue.uint32 = FWP_CONDITION_FLAG_IS_LOOPBACK;
+	conditionIndex++;
+	*/
+	/*
 	else if (iFlag == 1)
 	{
 		filter.action.type = FWP_ACTION_PERMIT;
@@ -692,6 +697,7 @@ WCP_AddFilter(
 		filter.weight.uint8 = 0x2;
 		filter.filterCondition = NULL;
 	}
+	
 	// 	else if (iFlag == 1)
 	// 	{
 	// 		filter.action.type = FWP_ACTION_CALLOUT_INSPECTION;
@@ -708,7 +714,7 @@ WCP_AddFilter(
 		
 		return status;
 	}
-
+	*/
 	filter.numFilterConditions = conditionIndex;
 
 	status = FwpmFilterAdd(
@@ -782,13 +788,13 @@ FWPM_LAYER_OUTBOUND_IPPACKET_V4_DISCARD
 	{
 		goto Exit;
 	}
-
-	status = WCP_AddFilter(layerKey, calloutKey, 0);
+	
+	status = WCP_AddFilter(layerKey, calloutKey);
 	if (!NT_SUCCESS(status))
 	{
 		goto Exit;
 	}
-
+	/*
 	status = WCP_AddFilter(layerKey, calloutKey, 1);
 	if (!NT_SUCCESS(status))
 	{
@@ -806,6 +812,7 @@ FWPM_LAYER_OUTBOUND_IPPACKET_V4_DISCARD
 	{
 		goto Exit;
 	}
+	*/
 
 Exit:
 

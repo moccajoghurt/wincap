@@ -156,8 +156,7 @@ WCP_NetworkNotify(
 NTSTATUS
 WCP_AddFilter(
 	_In_ const GUID* layerKey,
-	_In_ const GUID* calloutKey,
-	_In_ const int iFlag
+	_In_ const GUID* calloutKey
 );
 
 NTSTATUS
@@ -186,9 +185,9 @@ WCP_FreeInjectionHandles(
 );
 
 NTSTATUS
-WCP_shareClonedNetBufferList(
+WCP_ShareClonedNetBufferList(
 	PNET_BUFFER_LIST clonedNetBufferList,
-	BOOLEAN isInbound
+	BOOLEAN bSelfSent
 );
 
 #endif // _INSPECT_H_

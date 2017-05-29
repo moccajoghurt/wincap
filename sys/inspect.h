@@ -1,119 +1,119 @@
-/*++
 
-Copyright (c) Microsoft Corporation. All rights reserved
 
-Abstract:
+#ifndef _INSPECT_H_
+#define _INSPECT_H_
 
-   This header files declares common data types and function prototypes used
-   throughout the Transport Inspect sample.
-
-Environment:
-
-    Kernel mode
-
---*/
-
-#ifndef _TL_INSPECT_H_
-#define _TL_INSPECT_H_
-
-typedef enum TL_INSPECT_PACKET_TYPE_
-{
-   TL_INSPECT_CONNECT_PACKET,
-   TL_INSPECT_DATA_PACKET,
-   TL_INSPECT_REAUTH_PACKET
-} TL_INSPECT_PACKET_TYPE;
-
-//
-// TL_INSPECT_PENDED_PACKET is the object type we used to store all information
-// needed for out-of-band packet modification and re-injection. This type
-// also points back to the flow context the packet belongs to.
 
 #pragma warning(push)
-#pragma warning(disable: 4201) //NAMELESS_STRUCT_UNION
+#pragma warning(disable:4201)       // unnamed struct/union
 
-typedef struct TL_INSPECT_PENDED_PACKET_
-{
-   LIST_ENTRY listEntry;
-
-   ADDRESS_FAMILY addressFamily;
-   TL_INSPECT_PACKET_TYPE type;
-   FWP_DIRECTION  direction;
-   
-   UINT32 authConnectDecision;
-   HANDLE completionContext;
-
-   //
-   // Common fields for inbound and outbound traffic.
-   //
-   UINT8 protocol;
-   NET_BUFFER_LIST* netBufferList;
-   COMPARTMENT_ID compartmentId;
-   union
-   {
-      FWP_BYTE_ARRAY16 localAddr;
-      UINT32 ipv4LocalAddr;
-   };
-   union
-   {
-      UINT16 localPort;
-      UINT16 icmpType;
-   };
-   union
-   {
-      UINT16 remotePort;
-      UINT16 icmpCode;
-   };
-
-   //
-   // Data fields for outbound packet re-injection.
-   //
-   UINT64 endpointHandle;
-   union
-   {
-      FWP_BYTE_ARRAY16 remoteAddr;
-      UINT32 ipv4RemoteAddr;
-   };
-
-   SCOPE_ID remoteScopeId;
-   WSACMSGHDR* controlData;
-   ULONG controlDataLength;
-
-   //
-   // Data fields for inbound packet re-injection.
-   //
-   BOOLEAN ipSecProtected;
-   ULONG nblOffset;
-   UINT32 ipHeaderSize;
-   UINT32 transportHeaderSize;
-   IF_INDEX interfaceIndex;
-   IF_INDEX subInterfaceIndex;
-} TL_INSPECT_PENDED_PACKET;
+#include <fwpsk.h>
 
 #pragma warning(pop)
 
-//
-// Pooltags used by this callout driver.
-//
-#define TL_INSPECT_CONNECTION_POOL_TAG 'olfD'
-#define TL_INSPECT_PENDED_PACKET_POOL_TAG 'kppD'
-#define TL_INSPECT_CONTROL_DATA_POOL_TAG 'dcdD'
+#include <fwpmk.h>
+
+#include <ws2ipdef.h>
+#include <in6addr.h>
+#include <ip2string.h>
+
+#define INITGUID
+#include <guiddef.h>
+
+#define IPPROTO_NPCAP_LOOPBACK		250
 
 //
-// Shared global data.
+// Protocol headers
 //
-extern BOOLEAN configPermitTraffic;
 
-extern HANDLE gInjectionHandle;
+#pragma pack(push)
+#pragma pack (1)
 
-extern LIST_ENTRY gConnList;
-extern KSPIN_LOCK gConnListLock;
+//#include "macros.h"
 
-extern LIST_ENTRY gPacketQueue;
-extern KSPIN_LOCK gPacketQueueLock;
+/*
+* Structure of a IPv4 header, based on netinet/ip.h
+* http://openhip.sourceforge.net/doxygen/ip_8h_source.html
+*/
+typedef struct _IP_HEADER
+{
+	UCHAR     ip_hVerLen;			/* Version (4 bits) + Internet header length (4 bits) */
+	UCHAR     ip_TOS;				/* TOS Type of service */
+	USHORT    ip_Length;			/* Total length */
+	USHORT    ip_ID;				/* Identification */
+	USHORT    ip_Flags;				/* Flags (3 bits) + Fragment offset (13 bits) */
+	UCHAR     ip_TTL;				/* Time to live */
+	UCHAR     ip_Protocol;			/* Protocol */
+	USHORT    ip_Checksum;			/* Header checksum */
+	ULONG     ip_Src;				/* Source address */
+	ULONG     ip_Dst;				/* Destination address */
+} IP_HEADER, *PIP_HEADER;
 
-extern KEVENT gWorkerEvent;
+/*
+* The length of the IPv4 header.
+*/
+#define	IP_HDR_LEN		sizeof(IP_HEADER)
 
-extern BOOLEAN gDriverUnloading;
+/*
+* Structure of a IPv6 header, based on netinet/ip6.h
+* http://openhip.sourceforge.net/doxygen/ip_8h_source.html
+*/
+typedef struct _IP6_HEADER
+{
+	union
+	{
+		struct _ip6_HeaderCtl
+		{
+			ULONG ip6_VerFlow;		/* 4 bits version, 8 bits TC, 20 bits flow-ID */
+			USHORT ip6_PLength;		/* Payload length */
+			UCHAR ip6_NextHeader;	/* Next header */
+			UCHAR ip6_HopLimit;		/* Hop limit */
+		} ip6_HeaderCtl;
+		UCHAR ip6_VFC;				/* 4 bits version, top 4 bits tclass */
+	} ip6_CTL;
+	struct in6_addr ip6_Src;		/* Source address */
+	struct in6_addr ip6_Dst;		/* Destination address */
+} IP6_HEADER, *PIP6_HEADER;
+
+/*
+* The length of the IPv6 header.
+*/
+#define	IPV6_HDR_LEN		sizeof(IP6_HEADER)
+
+/*
+* Structure of a ICMP header
+* https://www.cymru.com/Documents/ip_icmp.h
+*/
+typedef struct _ICMP4_HEADER
+{
+	UCHAR icmp_Type;				/* Message type */
+	UCHAR icmp_Code;				/* Type sub-code */
+	USHORT icmp_Checksum;
+	union
+	{
+		struct _icmp_Echo
+		{
+			USHORT	icmp_Id;
+			USHORT	icmp_Sequence;
+		} icmp_Echo;				/* Echo datagram */
+		ULONG	icmp_Gateway;		/* Gateway address */
+		struct _icmp_Frag
+		{
+			USHORT	icmp_Unused;
+			USHORT	icmp_Mtu;
+		} icmp_Frag;				/* Path MTU discovery */
+	} icmp_Un;
+} ICMP4_HEADER, *PICMP4_HEADER;
+
+#define ICMP_TYPE_DEST_UNREACH	3	/* Destination Unreachable	*/
+#define ICMP_CODE_PROT_UNREACH	2	/* Protocol Unreachable		*/
+
+/*
+* The length of the IPv6 header.
+*/
+#define	ICMP_HDR_LEN		sizeof(ICMP4_HEADER)
+
+#pragma pack(pop)
 
 //
 // Shared function prototypes
@@ -122,93 +122,67 @@ extern BOOLEAN gDriverUnloading;
 #if(NTDDI_VERSION >= NTDDI_WIN7)
 
 void
-TLInspectALEConnectClassify(
-   _In_ const FWPS_INCOMING_VALUES* inFixedValues,
-   _In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
-   _Inout_opt_ void* layerData,
-   _In_opt_ const void* classifyContext,
-   _In_ const FWPS_FILTER* filter,
-   _In_ UINT64 flowContext,
-   _Inout_ FWPS_CLASSIFY_OUT* classifyOut
-   );
-
-void
-TLInspectALERecvAcceptClassify(
-   _In_ const FWPS_INCOMING_VALUES* inFixedValues,
-   _In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
-   _Inout_opt_ void* layerData,
-   _In_opt_ const void* classifyContext,
-   _In_ const FWPS_FILTER* filter,
-   _In_ UINT64 flowContext,
-   _Inout_ FWPS_CLASSIFY_OUT* classifyOut
-   );
-
-void
-TLInspectTransportClassify(
-   _In_ const FWPS_INCOMING_VALUES* inFixedValues,
-   _In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
-   _Inout_opt_ void* layerData,
-   _In_opt_ const void* classifyContext,
-   _In_ const FWPS_FILTER* filter,
-   _In_ UINT64 flowContext,
-   _Inout_ FWPS_CLASSIFY_OUT* classifyOut
-   );
+NPF_NetworkClassify(
+	_In_ const FWPS_INCOMING_VALUES* inFixedValues,
+	_In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
+	_Inout_opt_ void* layerData,
+	_In_opt_ const void* classifyContext,
+	_In_ const FWPS_FILTER* filter,
+	_In_ UINT64 flowContext,
+	_Inout_ FWPS_CLASSIFY_OUT* classifyOut
+);
 
 #else /// (NTDDI_VERSION >= NTDDI_WIN7)
 
 void
-TLInspectALEConnectClassify(
-   _In_ const FWPS_INCOMING_VALUES* inFixedValues,
-   _In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
-   _Inout_opt_ void* layerData,
-   _In_ const FWPS_FILTER* filter,
-   _In_ UINT64 flowContext,
-   _Inout_ FWPS_CLASSIFY_OUT* classifyOut
-   );
-
-void
-TLInspectALERecvAcceptClassify(
-   _In_ const FWPS_INCOMING_VALUES* inFixedValues,
-   _In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
-   _Inout_opt_ void* layerData,
-   _In_ const FWPS_FILTER* filter,
-   _In_ UINT64 flowContext,
-   _Inout_ FWPS_CLASSIFY_OUT* classifyOut
-   );
-
-void
-TLInspectTransportClassify(
-   _In_ const FWPS_INCOMING_VALUES* inFixedValues,
-   _In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
-   _Inout_opt_ void* layerData,
-   _In_ const FWPS_FILTER* filter,
-   _In_ UINT64 flowContext,
-   _Inout_ FWPS_CLASSIFY_OUT* classifyOut
-   );
+NPF_NetworkClassify(
+	_In_ const FWPS_INCOMING_VALUES* inFixedValues,
+	_In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
+	_Inout_opt_ void* layerData,
+	_In_ const FWPS_FILTER* filter,
+	_In_ UINT64 flowContext,
+	_Inout_ FWPS_CLASSIFY_OUT* classifyOut
+);
 
 #endif /// (NTDDI_VERSION >= NTDDI_WIN7)
 
 NTSTATUS
-TLInspectALEConnectNotify(
-   _In_ FWPS_CALLOUT_NOTIFY_TYPE notifyType,
-   _In_ const GUID* filterKey,
-   _Inout_ const FWPS_FILTER* filter
-   );
+NPF_NetworkNotify(
+	_In_ FWPS_CALLOUT_NOTIFY_TYPE notifyType,
+	_In_ const GUID* filterKey,
+	_Inout_ const FWPS_FILTER* filter
+);
 
 NTSTATUS
-TLInspectALERecvAcceptNotify(
-   _In_ FWPS_CALLOUT_NOTIFY_TYPE notifyType,
-   _In_ const GUID* filterKey,
-   _Inout_ const FWPS_FILTER* filter
-   );
+NPF_AddFilter(
+	_In_ const GUID* layerKey,
+	_In_ const GUID* calloutKey,
+	_In_ const int iFlag
+);
 
 NTSTATUS
-TLInspectTransportNotify(
-   _In_ FWPS_CALLOUT_NOTIFY_TYPE notifyType,
-   _In_ const GUID* filterKey,
-   _Inout_ const FWPS_FILTER* filter
-   );
+NPF_RegisterCallout(
+	_In_ const GUID* layerKey,
+	_In_ const GUID* calloutKey,
+	_Inout_ void* deviceObject,
+	_Out_ UINT32* calloutId
+);
 
-KSTART_ROUTINE TLInspectWorker;
+NTSTATUS
+NPF_RegisterCallouts(
+	_Inout_ void* deviceObject
+);
 
-#endif // _TL_INSPECT_H_
+void
+NPF_UnregisterCallouts(
+);
+
+NTSTATUS
+NPF_InitInjectionHandles(
+);
+
+NTSTATUS
+NPF_FreeInjectionHandles(
+);
+
+#endif // _INSPECT_H_

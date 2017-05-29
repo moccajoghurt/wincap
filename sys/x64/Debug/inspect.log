@@ -1,6 +1,10 @@
 ﻿  Building 'inspect' with toolset 'WindowsKernelModeDriver10.0' and the 'Universal' target platform.
-  Stamping x64\Debug\inspect.inf [Version] section with DriverVer=05/22/2017,16.5.2.180
+  Stamping x64\Debug\inspect.inf [Version] section with DriverVer=05/29/2017,15.44.44.84
   inspect.c
+c:\users\marius\git\wincap\sys\inspect.c(249): warning C4702: unreachable code
+c:\users\marius\git\wincap\sys\inspect.c(420): warning C4701: potentially uninitialized local variable 'uIPProto' used
+c:\users\marius\git\wincap\sys\inspect.c(453): warning C4701: potentially uninitialized local variable 'bInnerIPv4' used
+c:\users\marius\git\wincap\sys\inspect.c(197): warning C4702: unreachable code
   inspect.vcxproj -> C:\Users\marius\git\wincap\sys\x64\Debug\inspect.sys
   Done Adding Additional Store
   Successfully signed: C:\Users\marius\git\wincap\sys\x64\Debug\inspect.sys

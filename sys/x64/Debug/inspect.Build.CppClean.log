@@ -1,7 +1,4 @@
 c:\users\marius\git\wincap\sys\x64\debug\vc140.pdb
-c:\users\marius\git\wincap\sys\x64\debug\utils.obj
-c:\users\marius\git\wincap\sys\x64\debug\tl_drv.obj
-c:\users\marius\git\wincap\sys\x64\debug\share.obj
 c:\users\marius\git\wincap\sys\x64\debug\inspect.obj
 c:\users\marius\git\wincap\sys\x64\debug\inspect\inspect.cat
 c:\users\marius\git\wincap\sys\x64\debug\inspect.sys
@@ -10,8 +7,8 @@ c:\users\marius\git\wincap\sys\x64\debug\inspect.inf
 c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\cl.command.1.tlog
 c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\cl.read.1.tlog
 c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\cl.write.1.tlog
-c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\inf2cat-expand.1472.read.1.tlog
-c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\inf2cat-expand.1472.write.1.tlog
+c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\inf2cat-expand.7928.read.1.tlog
+c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\inf2cat-expand.7928.write.1.tlog
 c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\inf2cat-expand.read.1.tlog
 c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\inf2cat-expand.write.1.tlog
 c:\users\marius\git\wincap\sys\x64\debug\inspect.tlog\inf2cat.command.1.tlog

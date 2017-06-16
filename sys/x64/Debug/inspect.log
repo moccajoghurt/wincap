@@ -1,13 +1,10 @@
 ﻿  Building 'inspect' with toolset 'WindowsKernelModeDriver10.0' and the 'Universal' target platform.
-  Stamping x64\Debug\inspect.inf [Version] section with DriverVer=05/29/2017,20.1.3.358
+  Stamping x64\Debug\inspect.inf [Version] section with DriverVer=06/16/2017,13.28.59.808
   inspect.c
-inspect.c(574): warning C4102: 'Exit_Ethernet_Retreated': unreferenced label
-inspect.c(349): warning C4189: 'pContiguousData': local variable is initialized but not referenced
-inspect.c(351): warning C4101: 'pPacketData': unreferenced local variable
-c:\users\marius\git\wincap\sys\inspect.c(251): warning C4702: unreachable code
-c:\users\marius\git\wincap\sys\inspect.c(199): warning C4702: unreachable code
-c:\users\marius\git\wincap\sys\inspect.c(444): warning C4701: potentially uninitialized local variable 'uIPProto' used
-c:\users\marius\git\wincap\sys\inspect.c(477): warning C4701: potentially uninitialized local variable 'bInnerIPv4' used
+c:\users\marius\git\wincap\sys\inspect.c(258): warning C4702: unreachable code
+c:\users\marius\git\wincap\sys\inspect.c(206): warning C4702: unreachable code
+c:\users\marius\git\wincap\sys\inspect.c(451): warning C4701: potentially uninitialized local variable 'uIPProto' used
+c:\users\marius\git\wincap\sys\inspect.c(484): warning C4701: potentially uninitialized local variable 'bInnerIPv4' used
   inspect.vcxproj -> C:\Users\marius\git\wincap\sys\x64\Debug\inspect.sys
   Done Adding Additional Store
   Successfully signed: C:\Users\marius\git\wincap\sys\x64\Debug\inspect.sys

@@ -5,9 +5,12 @@
 //#include <fwpmk.h>
 //#include "stdafx.h"
 
-#include <wdf.h>
+#include <Wdm.h>
+//#include <wdf.h>
 #include "inspect.h"
 
+#define IOCTL_INSPECT_SHAREBUFFERLIST CTL_CODE( SIOCTL_TYPE, 0x800, METHOD_BUFFERED, FILE_READ_DATA|FILE_WRITE_DATA)
+#define SIOCTL_TYPE 40000
 #define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
 /*
 * The number of bytes in an Ethernet (MAC) address.
@@ -33,9 +36,9 @@ typedef struct _DLT_NULL_HEADER
 * The length of the combined header.
 */
 #define	DLT_NULL_HDR_LEN	sizeof(DLT_NULL_HEADER)
-#define NPCAP_CALLOUT_DRIVER_TAG (UINT32) 'NPCA'
-#define	DLTNULLTYPE_IP		0x00000002	/* IP protocol */
-#define	DLTNULLTYPE_IPV6	0x00000018	/* IPv6 */
+//#define NPCAP_CALLOUT_DRIVER_TAG (UINT32) 'NPCA'
+//#define	DLTNULLTYPE_IP		0x00000002	/* IP protocol */
+//#define	DLTNULLTYPE_IPV6	0x00000018	/* IPv6 */
 
 // 
 // Global variables
@@ -141,6 +144,10 @@ DEFINE_GUID(
 //
 
 DEVICE_OBJECT* gWdmDevice;
+
+const WCHAR deviceNameBuffer[] = L"\\Device\\wincap";
+const WCHAR deviceSymLinkBuffer[] = L"\\DosDevices\\wincap";
+
 //HANDLE g_WFPEngineHandle = INVALID_HANDLE_VALUE;
 UINT32 g_OutboundIPPacketV4 = 0;
 UINT32 g_OutboundIPPacketV6 = 0;
@@ -346,9 +353,9 @@ WCP_NetworkClassify(
 	BOOLEAN				bSelfSent = FALSE;
 	UCHAR				uIPProto;
 	BOOLEAN				bICMPProtocolUnreachable = FALSE;
-	PVOID				pContiguousData = NULL;
+	//PVOID				pContiguousData = NULL;
 	NET_BUFFER*			pNetBuffer = 0;
-	UCHAR				pPacketData[ETHER_HDR_LEN];
+	//UCHAR				pPacketData[ETHER_HDR_LEN];
 	PNET_BUFFER_LIST	pNetBufferList = (NET_BUFFER_LIST*)layerData;
 	COMPARTMENT_ID		compartmentID = UNSPECIFIED_COMPARTMENT_ID;
 	FWPS_PACKET_INJECTION_STATE injectionState = FWPS_PACKET_INJECTION_STATE_MAX;
@@ -569,9 +576,9 @@ WCP_NetworkClassify(
 			GroupOpen = TempOpen->GroupNext;
 		}
 		NdisReleaseSpinLock(&g_LoopbackOpenGroupHead->GroupLock);
-	}*/
+	}
 
-Exit_Ethernet_Retreated:
+Exit_Ethernet_Retreated:*/
 	// Advance the offset back to the original position.
 	NdisAdvanceNetBufferListDataStart(pClonedNetBufferList,
 		bytesRetreatedEthernet,
@@ -1081,7 +1088,7 @@ _IRQL_requires_same_
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 WCP_EvtDriverUnload(
-	_In_ WDFDRIVER driverObject
+	_In_ DRIVER_OBJECT* driverObject
 )
 {
 
@@ -1094,15 +1101,64 @@ WCP_EvtDriverUnload(
 	WCP_FreeInjectionHandles();
 }
 
+// will be called whenever an application uses CreateFile do communicate with the driver
+NTSTATUS WCP_OpenAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp)
+{
+	UNREFERENCED_PARAMETER(Irp);
+	UNREFERENCED_PARAMETER(pDeviceObject);
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IRP MJ CREATE received.\n");
+	return STATUS_SUCCESS;
+}
+
+// will be called whenever an application uses CloseHandle
+NTSTATUS WCP_CloseAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp)
+{
+	UNREFERENCED_PARAMETER(Irp);
+	UNREFERENCED_PARAMETER(pDeviceObject);
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IRP MJ CLOSE received.\n");
+	return STATUS_SUCCESS;
+}
+
+// wille be called whenever an application calls DeviceIoControl
+NTSTATUS WCP_IoControl(PDEVICE_OBJECT pDeviceObject, PIRP Irp)
+{
+	UNREFERENCED_PARAMETER(pDeviceObject);
+	PIO_STACK_LOCATION pIoStackLocation;
+	PCHAR welcome = "Hello from kerneland.";
+	PVOID pBuf = Irp->AssociatedIrp.SystemBuffer;
+
+	pIoStackLocation = IoGetCurrentIrpStackLocation(Irp);
+	switch (pIoStackLocation->Parameters.DeviceIoControl.IoControlCode)
+	{
+	case IOCTL_INSPECT_SHAREBUFFERLIST:
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IOCTL HELLO.\n");
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Message received : %s\n", pBuf);
+
+		RtlZeroMemory(pBuf, pIoStackLocation->Parameters.DeviceIoControl.InputBufferLength);
+		RtlCopyMemory(pBuf, welcome, strlen(welcome));
+
+		break;
+	}
+
+	// Finish the I/O operation by simply completing the packet and returning
+	// the same status as in the packet itself.
+	Irp->IoStatus.Status = STATUS_SUCCESS;
+	Irp->IoStatus.Information = strlen(welcome);
+	IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+	return STATUS_SUCCESS;
+}
 
 NTSTATUS
 WCP_InitDriverObjects(
 	_Inout_ DRIVER_OBJECT* driverObject,
-	_In_ const UNICODE_STRING* registryPath,
-	_Out_ WDFDRIVER* pDriver,
-	_Out_ WDFDEVICE* pDevice
+	_In_ const UNICODE_STRING* registryPath
+	/*_Out_ WDFDRIVER* pDriver,
+	_Out_ WDFDEVICE* pDevice*/
 )
 {
+	UNREFERENCED_PARAMETER(registryPath);
+	/*
 	NTSTATUS status;
 	WDF_DRIVER_CONFIG config;
 	PWDFDEVICE_INIT pInit = NULL;
@@ -1145,6 +1201,43 @@ WCP_InitDriverObjects(
 	}
 
 	WdfControlFinishInitializing(*pDevice);
+	*/
+
+	NTSTATUS status = 0;
+	UNICODE_STRING deviceNameUnicodeString, deviceSymLinkUnicodeString;
+	// Normalize name and symbolic link.
+	RtlInitUnicodeString(&deviceNameUnicodeString,
+	deviceNameBuffer);
+	RtlInitUnicodeString(&deviceSymLinkUnicodeString,
+	deviceSymLinkBuffer);
+	// Create the device.
+	status = IoCreateDevice(driverObject,
+		0, // For driver extension
+		&deviceNameUnicodeString,
+		FILE_DEVICE_UNKNOWN,
+		FILE_DEVICE_UNKNOWN,
+		FALSE,
+		&gWdmDevice);
+	if (!NT_SUCCESS(status))
+	{
+		goto Exit;
+	}
+
+	// Create the symbolic link
+	status = IoCreateSymbolicLink(&deviceSymLinkUnicodeString,
+		&deviceNameUnicodeString);
+	if (!NT_SUCCESS(status))
+	{
+		goto Exit;
+	}
+
+	driverObject->DriverUnload = WCP_EvtDriverUnload;
+	driverObject->MajorFunction[IRP_MJ_CREATE] = WCP_OpenAdapter;
+	driverObject->MajorFunction[IRP_MJ_CLOSE] = WCP_CloseAdapter;
+	driverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = WCP_IoControl;
+
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ADDED INSPECT DRIVER v0.1\n");
+	return STATUS_SUCCESS;
 
 Exit:
 	return status;
@@ -1157,18 +1250,17 @@ DriverEntry(
 )
 {
 	NTSTATUS status;
-	WDFDRIVER driver;
-	WDFDEVICE device;
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ADDED INSPECT DRIVER v0.1\n");
+	//WDFDRIVER driver;
+	//WDFDEVICE device;
 
 	// Request NX Non-Paged Pool when available
 	ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
 
 	status = WCP_InitDriverObjects(
 		driverObject,
-		registryPath,
-		&driver,
-		&device
+		registryPath
+		/*&driver,
+		&device*/
 	);
 
 	if (!NT_SUCCESS(status))
@@ -1183,7 +1275,7 @@ DriverEntry(
 		goto Exit;
 	}
 
-	gWdmDevice = WdfDeviceWdmGetDeviceObject(device);
+	//gWdmDevice = WdfDeviceWdmGetDeviceObject(device);
 
 	WCP_RegisterCallouts(gWdmDevice);
 

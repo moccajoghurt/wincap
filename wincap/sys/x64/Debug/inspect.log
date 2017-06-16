@@ -1,14 +1,14 @@
 ﻿  Building 'inspect' with toolset 'WindowsKernelModeDriver10.0' and the 'Universal' target platform.
-  Stamping x64\Debug\inspect.inf [Version] section with DriverVer=06/16/2017,13.41.14.959
+  Stamping x64\Debug\inspect.inf [Version] section with DriverVer=06/16/2017,14.21.41.497
   inspect.c
-inspect.c(1247): warning C4100: 'registryPath': unreferenced formal parameter
-c:\users\marius\git\wincap\sys\inspect.c(258): warning C4702: unreachable code
-c:\users\marius\git\wincap\sys\inspect.c(206): warning C4702: unreachable code
-c:\users\marius\git\wincap\sys\inspect.c(451): warning C4701: potentially uninitialized local variable 'uIPProto' used
-c:\users\marius\git\wincap\sys\inspect.c(484): warning C4701: potentially uninitialized local variable 'bInnerIPv4' used
-  inspect.vcxproj -> C:\Users\marius\git\wincap\sys\x64\Debug\inspect.sys
+inspect.c(1249): warning C4100: 'registryPath': unreferenced formal parameter
+c:\users\marius\git\wincap\wincap\sys\inspect.c(260): warning C4702: unreachable code
+c:\users\marius\git\wincap\wincap\sys\inspect.c(208): warning C4702: unreachable code
+c:\users\marius\git\wincap\wincap\sys\inspect.c(453): warning C4701: potentially uninitialized local variable 'uIPProto' used
+c:\users\marius\git\wincap\wincap\sys\inspect.c(486): warning C4701: potentially uninitialized local variable 'bInnerIPv4' used
+  inspect.vcxproj -> C:\Users\marius\git\wincap\wincap\sys\x64\Debug\inspect.sys
   Done Adding Additional Store
-  Successfully signed: C:\Users\marius\git\wincap\sys\x64\Debug\inspect.sys
+  Successfully signed: C:\Users\marius\git\wincap\wincap\sys\x64\Debug\inspect.sys
   
   Driver is a Universal Driver.
   .........................
@@ -21,7 +21,7 @@ c:\users\marius\git\wincap\sys\inspect.c(484): warning C4701: potentially uninit
   None
   
   Catalog generation complete.
-  C:\Users\marius\git\wincap\sys\x64\Debug\inspect\inspect.cat
+  C:\Users\marius\git\wincap\wincap\sys\x64\Debug\inspect\inspect.cat
   Done Adding Additional Store
   Successfully signed: x64\Debug\inspect\inspect.cat
   

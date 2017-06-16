@@ -145,8 +145,10 @@ DEFINE_GUID(
 
 DEVICE_OBJECT* gWdmDevice;
 
-const WCHAR deviceNameBuffer[] = L"\\Device\\wincap";
-const WCHAR deviceSymLinkBuffer[] = L"\\DosDevices\\wincap";
+//const WCHAR deviceNameBuffer[] = L"\\Device\\Inspect";
+//const WCHAR deviceSymLinkBuffer[] = L"\\DosDevices\\Inspect";
+const WCHAR deviceNameBuffer[] = L"\\Root\\Inspect";
+const WCHAR deviceSymLinkBuffer[] = L"\\Root\\Inspect";
 
 //HANDLE g_WFPEngineHandle = INVALID_HANDLE_VALUE;
 UINT32 g_OutboundIPPacketV4 = 0;

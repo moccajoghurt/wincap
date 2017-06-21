@@ -15,7 +15,7 @@ int __cdecl main(int argc, char* argv[])
 	DWORD dwBytesRead = 0;
 	char ReadBuffer[50] = {0};
 
-	hDevice = CreateFile(L"\\\\.\\wincap", GENERIC_WRITE|GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	hDevice = CreateFile(L"\\\\.\\WinCap", GENERIC_WRITE|GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	printf("Handle : %p\n",hDevice);
 
 	DeviceIoControl(hDevice, IOCTL_HELLO, welcome, strlen(welcome), ReadBuffer, sizeof(ReadBuffer), &dwBytesRead, NULL);

@@ -146,11 +146,6 @@ WCP_SUBLAYER,
 
 DEVICE_OBJECT* gWdmDevice;
 
-//const WCHAR deviceNameBuffer[] = L"\\Device\\Inspect";
-//const WCHAR deviceSymLinkBuffer[] = L"\\DosDevices\\Inspect";
-const WCHAR deviceNameBuffer[] = L"\\Device\\WinCap";
-const WCHAR deviceSymLinkBuffer[] = L"\\DosDevices\\WinCap";
-
 //HANDLE g_WFPEngineHandle = INVALID_HANDLE_VALUE;
 UINT32 g_OutboundIPPacketV4 = 0;
 UINT32 g_OutboundIPPacketV6 = 0;
@@ -1157,6 +1152,12 @@ WCP_InitDriverObjects(
 	_Inout_ DRIVER_OBJECT* driverObject
 )
 {
+	const WCHAR deviceNameBuffer[] = L"\\Device\\WinCap";
+	const WCHAR deviceSymLinkBuffer[] = L"\\DosDevices\\WinCap";
+
+	//const WCHAR deviceNameBuffer[] = L"WinCap";
+	//const WCHAR deviceSymLinkBuffer[] = L"WinCap";
+
 	NTSTATUS status = 0;
 	UNICODE_STRING deviceNameUnicodeString, deviceSymLinkUnicodeString;
 	// Normalize name and symbolic link.
@@ -1183,7 +1184,7 @@ WCP_InitDriverObjects(
 		&deviceNameUnicodeString);
 	if (!NT_SUCCESS(status))
 	{
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IoCreateSymbolicLink: %x\n", status);
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IoCreateSymbolicLink failed: %x\n", status);
 		goto Exit;
 	}
 
@@ -1192,7 +1193,7 @@ WCP_InitDriverObjects(
 	driverObject->MajorFunction[IRP_MJ_CLOSE] = WCP_CloseAdapter;
 	driverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = WCP_IoControl;
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ADDED INSPECT DRIVER v0.1\n");
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ADDED WinCap DRIVER v0.1\n");
 	return STATUS_SUCCESS;
 
 Exit:

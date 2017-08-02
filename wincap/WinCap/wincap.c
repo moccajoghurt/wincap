@@ -47,6 +47,9 @@ typedef struct _DLT_NULL_HEADER
 //extern POPEN_INSTANCE g_LoopbackOpenGroupHead; // Loopback adapter open_instance group head, this pointer points to one item in g_arrOpen list.
 //extern ULONG g_DltNullMode;
 
+const WCHAR deviceNameBuffer[] = L"\\Device\\WinCap";
+const WCHAR deviceSymLinkBuffer[] = L"\\DosDevices\\WinCap";
+
 // 
 // Callout and sublayer GUIDs
 //
@@ -1095,8 +1098,15 @@ WCP_EvtDriverUnload(
 	UNREFERENCED_PARAMETER(driverObject);
 
 	WCP_UnregisterCallouts();
-
 	WCP_FreeInjectionHandles();
+
+	UNICODE_STRING symLink;
+	RtlInitUnicodeString(&symLink, deviceSymLinkBuffer);
+
+	IoDeleteSymbolicLink(&symLink);
+	IoDeleteDevice(driverObject->DeviceObject);
+
+
 }
 
 // will be called whenever an application uses CreateFile do communicate with the driver
@@ -1152,8 +1162,6 @@ WCP_InitDriverObjects(
 	_Inout_ DRIVER_OBJECT* driverObject
 )
 {
-	const WCHAR deviceNameBuffer[] = L"\\Device\\WinCap";
-	const WCHAR deviceSymLinkBuffer[] = L"\\DosDevices\\WinCap";
 
 	//const WCHAR deviceNameBuffer[] = L"WinCap";
 	//const WCHAR deviceSymLinkBuffer[] = L"WinCap";
@@ -1193,7 +1201,7 @@ WCP_InitDriverObjects(
 	driverObject->MajorFunction[IRP_MJ_CLOSE] = WCP_CloseAdapter;
 	driverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = WCP_IoControl;
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ADDED WinCap DRIVER v0.1\n");
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully ADDED WinCap DRIVER v0.01\n");
 	return STATUS_SUCCESS;
 
 Exit:

@@ -28,8 +28,7 @@ ULONG g_DltNullMode = 0;
 /*
 * Structure of a DLT_NULL header.
 */
-typedef struct _DLT_NULL_HEADER
-{
+typedef struct _DLT_NULL_HEADER {
 	UINT	null_type;
 } DLT_NULL_HEADER, *PDLT_NULL_HEADER;
 
@@ -164,8 +163,7 @@ WCP_IsPacketSelfSent(
 	_In_ BOOLEAN bIPv4,
 	_Out_ BOOLEAN *pbInnerIPv4,
 	_Out_ UCHAR *puProto
-)
-{
+) {
 	NTSTATUS			status = STATUS_SUCCESS;
 	NET_BUFFER*			pNetBuffer = 0;
 	PVOID				pContiguousData = NULL;
@@ -175,30 +173,25 @@ WCP_IsPacketSelfSent(
 
 
 	pNetBuffer = NET_BUFFER_LIST_FIRST_NB(pNetBufferList);
-	while (pNetBuffer)
-	{
+	while (pNetBuffer) {
 		pContiguousData = NdisGetDataBuffer(pNetBuffer,
 			bIPv4 ? IP_HDR_LEN : IPV6_HDR_LEN,
 			pPacketData,
 			1,
 			0);
-		if (!pContiguousData)
-		{
+		if (!pContiguousData) {
 			status = STATUS_UNSUCCESSFUL;
 			return FALSE;
 		}
-		else
-		{
+		else {
 			uProto = bIPv4 ? ((PIP_HEADER)pContiguousData)->ip_Protocol : ((PIP6_HEADER)pContiguousData)->ip6_CTL.ip6_HeaderCtl.ip6_NextHeader;
 			*puProto = uProto;
-			if (uProto == IPPROTO_NPCAP_LOOPBACK)
-			{
+			if (uProto == IPPROTO_NPCAP_LOOPBACK) {
 				*pbInnerIPv4 = bIPv4;
 
 				return TRUE;
 			}
-			else
-			{
+			else {
 
 				return FALSE;
 			}
@@ -214,8 +207,7 @@ WCP_IsPacketSelfSent(
 BOOLEAN
 WCP_IsICMPProtocolUnreachablePacket(
 	_In_ PNET_BUFFER_LIST pNetBufferList
-)
-{
+) {
 	NTSTATUS			status = STATUS_SUCCESS;
 	NET_BUFFER*			pNetBuffer = 0;
 	PVOID				pContiguousData = NULL;
@@ -226,32 +218,25 @@ WCP_IsICMPProtocolUnreachablePacket(
 
 
 	pNetBuffer = NET_BUFFER_LIST_FIRST_NB(pNetBufferList);
-	while (pNetBuffer)
-	{
+	while (pNetBuffer) {
 		pContiguousData = NdisGetDataBuffer(pNetBuffer,
 			IP_HDR_LEN + ICMP_HDR_LEN,
 			pPacketData,
 			1,
 			0);
-		if (!pContiguousData)
-		{
+		if (!pContiguousData) {
 			status = STATUS_UNSUCCESSFUL;
 
 			return FALSE;
 		}
-		else
-		{
+		else {
 			pIPHeader = (PIP_HEADER)pContiguousData;
 			pICMPHeader = (PICMP4_HEADER)((PUCHAR)pContiguousData + IP_HDR_LEN);
 			if (((*((PUCHAR)(&pIPHeader->ip_Src)) == 0x7F && *((PUCHAR)(&pIPHeader->ip_Dst)) == 0x7F) || (pIPHeader->ip_Src == pIPHeader->ip_Dst)) &&
-				pICMPHeader->icmp_Type == ICMP_TYPE_DEST_UNREACH && pICMPHeader->icmp_Code == ICMP_CODE_PROT_UNREACH)
-			{
-
+				pICMPHeader->icmp_Type == ICMP_TYPE_DEST_UNREACH && pICMPHeader->icmp_Code == ICMP_CODE_PROT_UNREACH) {
 				return TRUE;
 			}
-			else
-			{
-
+			else {
 				return FALSE;
 			}
 		}
@@ -263,19 +248,16 @@ WCP_IsICMPProtocolUnreachablePacket(
 	return FALSE;
 }
 
-VOID
-WCP_NetworkInjectionComplete(
+VOID WCP_NetworkInjectionComplete(
 	_In_ VOID* pContext,
 	_Inout_ NET_BUFFER_LIST* pNetBufferList,
 	_In_ BOOLEAN dispatchLevel
-)
-{
+) {
 	UNREFERENCED_PARAMETER(dispatchLevel);
 	UNREFERENCED_PARAMETER(pContext);
 
 
-	if (pNetBufferList->Status != STATUS_SUCCESS)
-	{
+	if (pNetBufferList->Status != STATUS_SUCCESS) {
 	}
 
 	FwpsFreeCloneNetBufferList(pNetBufferList, 0);
@@ -368,17 +350,16 @@ WCP_NetworkClassify(
 	UNREFERENCED_PARAMETER(flowContext);
 
 	// Make the default action.
-	if (classifyOut->rights & FWPS_RIGHT_ACTION_WRITE)
+	if (classifyOut->rights & FWPS_RIGHT_ACTION_WRITE) {
 		classifyOut->actionType = FWP_ACTION_CONTINUE;
+	}
 
 	// Filter out fragment packets and reassembled packets.
-	if (inMetaValues->currentMetadataValues & FWP_CONDITION_FLAG_IS_FRAGMENT)
-	{
+	if (inMetaValues->currentMetadataValues & FWP_CONDITION_FLAG_IS_FRAGMENT) {
 		return;
 	}
 #if(NTDDI_VERSION >= NTDDI_VISTASP1)
-	if (inMetaValues->currentMetadataValues & FWP_CONDITION_FLAG_IS_REASSEMBLED)
-	{
+	if (inMetaValues->currentMetadataValues & FWP_CONDITION_FLAG_IS_REASSEMBLED) {
 		return;
 	}
 #endif
@@ -386,34 +367,27 @@ WCP_NetworkClassify(
 
 
 	// Get the packet protocol (IPv4 or IPv6) and the direction (Inbound or Outbound).
-	if (inFixedValues->layerId == FWPS_LAYER_OUTBOUND_IPPACKET_V4 || inFixedValues->layerId == FWPS_LAYER_INBOUND_IPPACKET_V4)
-	{
+	if (inFixedValues->layerId == FWPS_LAYER_OUTBOUND_IPPACKET_V4 || inFixedValues->layerId == FWPS_LAYER_INBOUND_IPPACKET_V4) {
 		bIPv4 = TRUE;
 	}
-	else if (inFixedValues->layerId == FWPS_LAYER_OUTBOUND_IPPACKET_V6 || inFixedValues->layerId == FWPS_LAYER_INBOUND_IPPACKET_V6)
-	{
+	else if (inFixedValues->layerId == FWPS_LAYER_OUTBOUND_IPPACKET_V6 || inFixedValues->layerId == FWPS_LAYER_INBOUND_IPPACKET_V6) {
 		bIPv4 = FALSE;
 	}
-	else
-	{
+	else {
 		bIPv4 = FALSE;
 	}
 
-	if (inFixedValues->layerId == FWPS_LAYER_OUTBOUND_IPPACKET_V4 || inFixedValues->layerId == FWPS_LAYER_OUTBOUND_IPPACKET_V6)
-	{
+	if (inFixedValues->layerId == FWPS_LAYER_OUTBOUND_IPPACKET_V4 || inFixedValues->layerId == FWPS_LAYER_OUTBOUND_IPPACKET_V6) {
 		bInbound = FALSE;
 	}
-	else if (inFixedValues->layerId == FWPS_LAYER_INBOUND_IPPACKET_V4 || inFixedValues->layerId == FWPS_LAYER_INBOUND_IPPACKET_V6)
-	{
+	else if (inFixedValues->layerId == FWPS_LAYER_INBOUND_IPPACKET_V4 || inFixedValues->layerId == FWPS_LAYER_INBOUND_IPPACKET_V6) {
 		bInbound = TRUE;
 	}
-	else
-	{
+	else {
 		bInbound = FALSE;
 	}
 
-	if (inMetaValues->currentMetadataValues & FWPS_METADATA_FIELD_IP_HEADER_SIZE)
-	{
+	if (inMetaValues->currentMetadataValues & FWPS_METADATA_FIELD_IP_HEADER_SIZE) {
 		ipHeaderSize = inMetaValues->ipHeaderSize;
 	}
 
@@ -424,8 +398,7 @@ WCP_NetworkClassify(
 	// We don't re-inspect packets that we've inspected earlier.
 	//
 	if (injectionState == FWPS_PACKET_INJECTED_BY_SELF ||
-		injectionState == FWPS_PACKET_PREVIOUSLY_INJECTED_BY_SELF)
-	{
+		injectionState == FWPS_PACKET_PREVIOUSLY_INJECTED_BY_SELF) {
 		return;
 	}
 
@@ -441,25 +414,21 @@ WCP_NetworkClassify(
 		NULL,
 		NULL);
 
-	if (status != STATUS_SUCCESS)
-	{
+	if (status != STATUS_SUCCESS) {
 		return;
 	}
 
 	//bSelfSent = WCP_IsPacketSelfSent(pNetBufferList, (BOOLEAN)bIPv4);
 	bSelfSent = bInbound ? WCP_IsPacketSelfSent(pNetBufferList, bIPv4, &bInnerIPv4, &uIPProto) : FALSE;
 
-	if (bInbound && bIPv4 && !bSelfSent && uIPProto == IPPROTO_ICMP)
-	{
+	if (bInbound && bIPv4 && !bSelfSent && uIPProto == IPPROTO_ICMP) {
 		bICMPProtocolUnreachable = WCP_IsICMPProtocolUnreachablePacket(pNetBufferList);
-		if (bICMPProtocolUnreachable)
-		{
+		if (bICMPProtocolUnreachable) {
 			goto Exit_WSK_IP_Retreated;
 		}
 	}
 
-	if (bSelfSent)
-	{
+	if (bSelfSent) {
 		NdisAdvanceNetBufferListDataStart(pNetBufferList,
 			bIPv4 ? IP_HDR_LEN : IPV6_HDR_LEN,
 			FALSE,
@@ -467,19 +436,18 @@ WCP_NetworkClassify(
 	}
 
 	// Here if this NBL is sent by ourself, we will clone it starting from IP header and inject it into Network Layer send path.
-	if (bSelfSent)
-	{
+	if (bSelfSent) {
 		PNET_BUFFER_LIST pClonedNetBufferList_Injection;
 		status = FwpsAllocateCloneNetBufferList(pNetBufferList, NULL, NULL, 0, &pClonedNetBufferList_Injection);
-		if (status != STATUS_SUCCESS)
-		{
+		if (status != STATUS_SUCCESS) {
 
 			goto Exit_WSK_IP_Retreated;
 		}
 
 		if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
-			FWPS_METADATA_FIELD_COMPARTMENT_ID))
+			FWPS_METADATA_FIELD_COMPARTMENT_ID)) {
 			compartmentID = (COMPARTMENT_ID)inMetaValues->compartmentId;
+		}
 
 		// This cloned NBL will be freed in WCP_NetworkInjectionComplete function.
 		status = FwpsInjectNetworkSendAsync(bInnerIPv4 ? g_InjectionHandle_IPv4 : g_InjectionHandle_IPv6,
@@ -489,8 +457,7 @@ WCP_NetworkClassify(
 			pClonedNetBufferList_Injection,
 			WCP_NetworkInjectionComplete,
 			NULL);
-		if (status != STATUS_SUCCESS)
-		{
+		if (status != STATUS_SUCCESS) {
 
 			FwpsFreeCloneNetBufferList(pClonedNetBufferList_Injection, 0);
 			goto Exit_WSK_IP_Retreated;
@@ -505,8 +472,7 @@ WCP_NetworkClassify(
 	// We clone this NBL again, for packet reading operation.
 	PNET_BUFFER_LIST pClonedNetBufferList;
 	status = FwpsAllocateCloneNetBufferList(pNetBufferList, NULL, NULL, 0, &pClonedNetBufferList);
-	if (status != STATUS_SUCCESS)
-	{
+	if (status != STATUS_SUCCESS) {
 
 		goto Exit_WSK_IP_Retreated;
 	}
@@ -517,8 +483,7 @@ WCP_NetworkClassify(
 		0,
 		0,
 		0);
-	if (status != STATUS_SUCCESS)
-	{
+	if (status != STATUS_SUCCESS) {
 		bytesRetreatedEthernet = 0;
 
 		goto Exit_Packet_Cloned;
@@ -590,8 +555,7 @@ Exit_Packet_Cloned:
 	FwpsFreeCloneNetBufferList(pClonedNetBufferList, 0);
 
 Exit_WSK_IP_Retreated:
-	if (bSelfSent)
-	{
+	if (bSelfSent) {
 		status = NdisRetreatNetBufferListDataStart(pNetBufferList,
 			bIPv4 ? IP_HDR_LEN : IPV6_HDR_LEN,
 			0,
@@ -620,14 +584,10 @@ WCP_NetworkNotify(
 	_In_ FWPS_CALLOUT_NOTIFY_TYPE notifyType,
 	_In_ const GUID* filterKey,
 	_Inout_ const FWPS_FILTER* filter
-)
-{
+) {
 	UNREFERENCED_PARAMETER(notifyType);
 	UNREFERENCED_PARAMETER(filterKey);
 	UNREFERENCED_PARAMETER(filter);
-
-
-
 
 	return STATUS_SUCCESS;
 }
@@ -636,12 +596,10 @@ WCP_NetworkNotify(
 // Callout driver implementation
 //
 
-NTSTATUS
-WCP_AddFilter(
+NTSTATUS WCP_AddFilter(
 	_In_ const GUID* layerKey,
 	_In_ const GUID* calloutKey
-)
-{
+) {
 
 	NTSTATUS status = STATUS_SUCCESS;
 
@@ -735,25 +693,24 @@ WCP_AddFilter(
 	return status;
 }
 
-NTSTATUS
-WCP_RegisterCallout(
+NTSTATUS WCP_RegisterCallout(
 	_In_ const GUID* layerKey,
 	_In_ const GUID* calloutKey,
 	_Inout_ void* deviceObject,
 	_Out_ UINT32* calloutId
-)
-/* ++
+) {
+	/* ++
 
-This function registers callouts and filters that intercept transport
-traffic at the following layers --
+	This function registers callouts and filters that intercept transport
+	traffic at the following layers --
 
-FWPM_LAYER_INBOUND_IPPACKET_V4
-FWPM_LAYER_INBOUND_IPPACKET_V6
-FWPM_LAYER_OUTBOUND_IPPACKET_V4
-FWPM_LAYER_OUTBOUND_IPPACKET_V4_DISCARD
+	FWPM_LAYER_INBOUND_IPPACKET_V4
+	FWPM_LAYER_INBOUND_IPPACKET_V6
+	FWPM_LAYER_OUTBOUND_IPPACKET_V4
+	FWPM_LAYER_OUTBOUND_IPPACKET_V4_DISCARD
 
--- */
-{
+	-- */
+
 
 	NTSTATUS status = STATUS_SUCCESS;
 
@@ -773,8 +730,7 @@ FWPM_LAYER_OUTBOUND_IPPACKET_V4_DISCARD
 		&sCallout,
 		calloutId
 	);
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 	calloutRegistered = TRUE;
@@ -792,14 +748,12 @@ FWPM_LAYER_OUTBOUND_IPPACKET_V4_DISCARD
 		NULL,
 		NULL
 	);
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 
 	status = WCP_AddFilter(layerKey, calloutKey);
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 	/*
@@ -824,10 +778,8 @@ FWPM_LAYER_OUTBOUND_IPPACKET_V4_DISCARD
 
 Exit:
 
-	if (!NT_SUCCESS(status))
-	{
-		if (calloutRegistered)
-		{
+	if (!NT_SUCCESS(status)) {
+		if (calloutRegistered) {
 			FwpsCalloutUnregisterById(*calloutId);
 			*calloutId = 0;
 		}
@@ -837,21 +789,18 @@ Exit:
 	return status;
 }
 
-NTSTATUS
-WCP_RegisterCallouts(
+NTSTATUS WCP_RegisterCallouts(
 	_Inout_ void* deviceObject
-)
-/* ++
+) {
+	/* ++
 
-This function registers dynamic callouts and filters that intercept
-transport traffic at ALE AUTH_CONNECT/AUTH_RECV_ACCEPT and
-INBOUND/OUTBOUND transport layers.
+	This function registers dynamic callouts and filters that intercept
+	transport traffic at ALE AUTH_CONNECT/AUTH_RECV_ACCEPT and
+	INBOUND/OUTBOUND transport layers.
 
-Callouts and filters will be removed during DriverUnload.
+	Callouts and filters will be removed during DriverUnload.
 
--- */
-{
-
+	-- */
 	NTSTATUS status = STATUS_SUCCESS;
 	FWPM_SUBLAYER NPFSubLayer;
 
@@ -869,15 +818,13 @@ Callouts and filters will be removed during DriverUnload.
 		&session,
 		&gWdmDevice
 	);
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 	engineOpened = TRUE;
 
 	status = FwpmTransactionBegin(gWdmDevice, 0);
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 	inTransaction = TRUE;
@@ -894,21 +841,19 @@ Callouts and filters will be removed during DriverUnload.
 							// implementation.
 
 	status = FwpmSubLayerAdd(gWdmDevice, &NPFSubLayer, NULL);
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 
 	//if (isV4)
-	{
+{
 		status = WCP_RegisterCallout(
 			&FWPM_LAYER_OUTBOUND_IPPACKET_V4,
 			&WCP_OUTBOUND_IPPACKET_CALLOUT_V4,
 			deviceObject,
 			&g_OutboundIPPacketV4
 		);
-		if (!NT_SUCCESS(status))
-		{
+		if (!NT_SUCCESS(status)) {
 			goto Exit;
 		}
 
@@ -918,8 +863,7 @@ Callouts and filters will be removed during DriverUnload.
 			deviceObject,
 			&g_InboundIPPacketV4
 		);
-		if (!NT_SUCCESS(status))
-		{
+		if (!NT_SUCCESS(status)) {
 			goto Exit;
 		}
 	}
@@ -931,8 +875,7 @@ Callouts and filters will be removed during DriverUnload.
 			deviceObject,
 			&g_OutboundIPPacketV6
 		);
-		if (!NT_SUCCESS(status))
-		{
+		if (!NT_SUCCESS(status)) {
 			goto Exit;
 		}
 
@@ -942,30 +885,25 @@ Callouts and filters will be removed during DriverUnload.
 			deviceObject,
 			&g_InboundIPPacketV6
 		);
-		if (!NT_SUCCESS(status))
-		{
+		if (!NT_SUCCESS(status)) {
 			goto Exit;
 		}
 	}
 
 	status = FwpmTransactionCommit(gWdmDevice);
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 	inTransaction = FALSE;
 
 Exit:
 
-	if (!NT_SUCCESS(status))
-	{
-		if (inTransaction)
-		{
+	if (!NT_SUCCESS(status)) {
+		if (inTransaction) {
 			FwpmTransactionAbort(gWdmDevice);
 			_Analysis_assume_lock_not_held_(gWdmDevice); // Potential leak if "FwpmTransactionAbort" fails
 		}
-		if (engineOpened)
-		{
+		if (engineOpened) {
 			FwpmEngineClose(gWdmDevice);
 			gWdmDevice = INVALID_HANDLE_VALUE;
 		}
@@ -975,31 +913,23 @@ Exit:
 	return status;
 }
 
-void
-WCP_UnregisterCallouts(
-)
-{
+void WCP_UnregisterCallouts() {
 
 
-	if (gWdmDevice != INVALID_HANDLE_VALUE)
-	{
+	if (gWdmDevice != INVALID_HANDLE_VALUE) {
 		FwpmEngineClose(gWdmDevice);
 		gWdmDevice = INVALID_HANDLE_VALUE;
 
-		if (g_OutboundIPPacketV4)
-		{
+		if (g_OutboundIPPacketV4) {
 			FwpsCalloutUnregisterById(g_OutboundIPPacketV4);
 		}
-		if (g_OutboundIPPacketV6)
-		{
+		if (g_OutboundIPPacketV6) {
 			FwpsCalloutUnregisterById(g_OutboundIPPacketV6);
 		}
-		if (g_InboundIPPacketV4)
-		{
+		if (g_InboundIPPacketV4) {
 			FwpsCalloutUnregisterById(g_InboundIPPacketV4);
 		}
-		if (g_InboundIPPacketV6)
-		{
+		if (g_InboundIPPacketV6) {
 			FwpsCalloutUnregisterById(g_InboundIPPacketV6);
 		}
 	}
@@ -1007,25 +937,22 @@ WCP_UnregisterCallouts(
 
 }
 
-NTSTATUS
-WCP_InitInjectionHandles(
-)
-/* ++
+NTSTATUS WCP_InitInjectionHandles() {
+	/* ++
 
-Open injection handles (IPv4 and IPv6) for use with the various injection APIs.
+	Open injection handles (IPv4 and IPv6) for use with the various injection APIs.
 
-injection handles will be removed during DriverUnload.
+	injection handles will be removed during DriverUnload.
 
--- */
-{
+	-- */
+
 	NTSTATUS status = STATUS_SUCCESS;
 
 	status = FwpsInjectionHandleCreate(AF_INET,
 		FWPS_INJECTION_TYPE_NETWORK,
 		&g_InjectionHandle_IPv4);
 
-	if (status != STATUS_SUCCESS)
-	{
+	if (status != STATUS_SUCCESS) {
 		return status;
 	}
 
@@ -1033,8 +960,7 @@ injection handles will be removed during DriverUnload.
 		FWPS_INJECTION_TYPE_NETWORK,
 		&g_InjectionHandle_IPv6);
 
-	if (status != STATUS_SUCCESS)
-	{
+	if (status != STATUS_SUCCESS){
 		return status;
 	}
 
@@ -1043,36 +969,29 @@ injection handles will be removed during DriverUnload.
 }
 
 NTSTATUS
-WCP_FreeInjectionHandles(
-)
-/* ++
+WCP_FreeInjectionHandles() {
+	/* ++
 
-Free injection handles (IPv4 and IPv6).
+	Free injection handles (IPv4 and IPv6).
 
--- */
-{
+	-- */
 	NTSTATUS status = STATUS_SUCCESS;
 
 
-
-	if (g_InjectionHandle_IPv4 != INVALID_HANDLE_VALUE)
-	{
+	if (g_InjectionHandle_IPv4 != INVALID_HANDLE_VALUE) {
 		status = FwpsInjectionHandleDestroy(g_InjectionHandle_IPv4);
 
-		if (status != STATUS_SUCCESS)
-		{
+		if (status != STATUS_SUCCESS) {
 			return status;
 		}
 
 		g_InjectionHandle_IPv4 = INVALID_HANDLE_VALUE;
 	}
 
-	if (g_InjectionHandle_IPv6 != INVALID_HANDLE_VALUE)
-	{
+	if (g_InjectionHandle_IPv6 != INVALID_HANDLE_VALUE) {
 		status = FwpsInjectionHandleDestroy(g_InjectionHandle_IPv6);
 
-		if (status != STATUS_SUCCESS)
-		{
+		if (status != STATUS_SUCCESS) {
 			return status;
 		}
 
@@ -1090,10 +1009,9 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
 void
 WCP_EvtDriverUnload(
 	_In_ DRIVER_OBJECT* driverObject
-)
-{
+) {
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "UNLOADING INSPECT DRIVER\n");
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "UNLOADING WinCap DRIVER\n");
 
 	UNREFERENCED_PARAMETER(driverObject);
 
@@ -1110,8 +1028,7 @@ WCP_EvtDriverUnload(
 }
 
 // will be called whenever an application uses CreateFile do communicate with the driver
-NTSTATUS WCP_OpenAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp)
-{
+NTSTATUS WCP_OpenAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp) {
 	UNREFERENCED_PARAMETER(Irp);
 	UNREFERENCED_PARAMETER(pDeviceObject);
 	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IRP MJ CREATE received.\n");
@@ -1119,8 +1036,7 @@ NTSTATUS WCP_OpenAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp)
 }
 
 // will be called whenever an application uses CloseHandle
-NTSTATUS WCP_CloseAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp)
-{
+NTSTATUS WCP_CloseAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp) {
 	UNREFERENCED_PARAMETER(Irp);
 	UNREFERENCED_PARAMETER(pDeviceObject);
 	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IRP MJ CLOSE received.\n");
@@ -1128,16 +1044,14 @@ NTSTATUS WCP_CloseAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp)
 }
 
 // will be called whenever an application calls DeviceIoControl
-NTSTATUS WCP_IoControl(PDEVICE_OBJECT pDeviceObject, PIRP Irp)
-{
+NTSTATUS WCP_IoControl(PDEVICE_OBJECT pDeviceObject, PIRP Irp) {
 	UNREFERENCED_PARAMETER(pDeviceObject);
 	PIO_STACK_LOCATION pIoStackLocation;
 	PCHAR welcome = "Hello from kerneland.";
 	PVOID pBuf = Irp->AssociatedIrp.SystemBuffer;
 
 	pIoStackLocation = IoGetCurrentIrpStackLocation(Irp);
-	switch (pIoStackLocation->Parameters.DeviceIoControl.IoControlCode)
-	{
+	switch (pIoStackLocation->Parameters.DeviceIoControl.IoControlCode) {
 	case IOCTL_INSPECT_SHAREBUFFERLIST:
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IOCTL HELLO.\n");
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Message received : %s\n", pBuf);
@@ -1160,8 +1074,7 @@ NTSTATUS WCP_IoControl(PDEVICE_OBJECT pDeviceObject, PIRP Irp)
 NTSTATUS
 WCP_InitDriverObjects(
 	_Inout_ DRIVER_OBJECT* driverObject
-)
-{
+) {
 
 	//const WCHAR deviceNameBuffer[] = L"WinCap";
 	//const WCHAR deviceSymLinkBuffer[] = L"WinCap";
@@ -1181,8 +1094,7 @@ WCP_InitDriverObjects(
 		FILE_DEVICE_UNKNOWN,
 		FALSE,
 		&gWdmDevice);
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IoCreateDevice failed: %x\n", status);
 		goto Exit;
 	}
@@ -1190,8 +1102,7 @@ WCP_InitDriverObjects(
 	// Create the symbolic link
 	status = IoCreateSymbolicLink(&deviceSymLinkUnicodeString,
 		&deviceNameUnicodeString);
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IoCreateSymbolicLink failed: %x\n", status);
 		goto Exit;
 	}
@@ -1222,15 +1133,13 @@ DriverEntry(
 
 	status = WCP_InitDriverObjects(driverObject);
 
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 
 	//status = WCP_InitInjectionHandles();
 
-	if (!NT_SUCCESS(status))
-	{
+	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 
@@ -1238,10 +1147,8 @@ DriverEntry(
 
 Exit:
 
-	if (!NT_SUCCESS(status))
-	{
-		if (gWdmDevice != NULL)
-		{
+	if (!NT_SUCCESS(status)) {
+		if (gWdmDevice != NULL) {
 			WCP_UnregisterCallouts();
 		}
 	}

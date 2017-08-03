@@ -182,8 +182,7 @@ WCP_IsPacketSelfSent(
 		if (!pContiguousData) {
 			status = STATUS_UNSUCCESSFUL;
 			return FALSE;
-		}
-		else {
+		} else {
 			uProto = bIPv4 ? ((PIP_HEADER)pContiguousData)->ip_Protocol : ((PIP6_HEADER)pContiguousData)->ip6_CTL.ip6_HeaderCtl.ip6_NextHeader;
 			*puProto = uProto;
 			if (uProto == IPPROTO_NPCAP_LOOPBACK) {
@@ -199,7 +198,6 @@ WCP_IsPacketSelfSent(
 
 		pNetBuffer = pNetBuffer->Next;
 	}
-
 
 	return FALSE;
 }

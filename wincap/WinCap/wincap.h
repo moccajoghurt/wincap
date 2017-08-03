@@ -36,8 +36,7 @@
 * Structure of a IPv4 header, based on netinet/ip.h
 * http://openhip.sourceforge.net/doxygen/ip_8h_source.html
 */
-typedef struct _IP_HEADER
-{
+typedef struct _IP_HEADER {
 	UCHAR     ip_hVerLen;			/* Version (4 bits) + Internet header length (4 bits) */
 	UCHAR     ip_TOS;				/* TOS Type of service */
 	USHORT    ip_Length;			/* Total length */
@@ -59,12 +58,9 @@ typedef struct _IP_HEADER
 * Structure of a IPv6 header, based on netinet/ip6.h
 * http://openhip.sourceforge.net/doxygen/ip_8h_source.html
 */
-typedef struct _IP6_HEADER
-{
-	union
-	{
-		struct _ip6_HeaderCtl
-		{
+typedef struct _IP6_HEADER {
+	union {
+		struct _ip6_HeaderCtl {
 			ULONG ip6_VerFlow;		/* 4 bits version, 8 bits TC, 20 bits flow-ID */
 			USHORT ip6_PLength;		/* Payload length */
 			UCHAR ip6_NextHeader;	/* Next header */
@@ -85,21 +81,17 @@ typedef struct _IP6_HEADER
 * Structure of a ICMP header
 * https://www.cymru.com/Documents/ip_icmp.h
 */
-typedef struct _ICMP4_HEADER
-{
+typedef struct _ICMP4_HEADER {
 	UCHAR icmp_Type;				/* Message type */
 	UCHAR icmp_Code;				/* Type sub-code */
 	USHORT icmp_Checksum;
-	union
-	{
-		struct _icmp_Echo
-		{
+	union {
+		struct _icmp_Echo {
 			USHORT	icmp_Id;
 			USHORT	icmp_Sequence;
 		} icmp_Echo;				/* Echo datagram */
 		ULONG	icmp_Gateway;		/* Gateway address */
-		struct _icmp_Frag
-		{
+		struct _icmp_Frag {
 			USHORT	icmp_Unused;
 			USHORT	icmp_Mtu;
 		} icmp_Frag;				/* Path MTU discovery */
@@ -122,8 +114,7 @@ typedef struct _ICMP4_HEADER
 
 #if(NTDDI_VERSION >= NTDDI_WIN7)
 
-void
-WCP_NetworkClassify(
+void WCP_NetworkClassify(
 	_In_ const FWPS_INCOMING_VALUES* inFixedValues,
 	_In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
 	_Inout_opt_ void* layerData,

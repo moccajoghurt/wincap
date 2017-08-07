@@ -10,8 +10,8 @@
 //#include <wdf.h>
 #include "wincap.h"
 
-#define IOCTL_INSPECT_SHAREBUFFERLIST CTL_CODE( SIOCTL_TYPE, 0x800, METHOD_BUFFERED, FILE_READ_DATA|FILE_WRITE_DATA)
 #define SIOCTL_TYPE 40000
+#define IOCTL_INVERT_NOTIFICATION CTL_CODE(SIOCTL_TYPE, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
 /*
 * The number of bytes in an Ethernet (MAC) address.
@@ -46,8 +46,6 @@ typedef struct _DLT_NULL_HEADER {
 //extern POPEN_INSTANCE g_LoopbackOpenGroupHead; // Loopback adapter open_instance group head, this pointer points to one item in g_arrOpen list.
 //extern ULONG g_DltNullMode;
 
-const WCHAR deviceNameBuffer[] = L"\\Device\\WinCap";
-const WCHAR deviceSymLinkBuffer[] = L"\\DosDevices\\WinCap";
 
 // 
 // Callout and sublayer GUIDs
@@ -1005,115 +1003,234 @@ _Function_class_(EVT_WDF_DRIVER_UNLOAD)
 _IRQL_requires_same_
 _IRQL_requires_max_(PASSIVE_LEVEL)
 void
-WCP_EvtDriverUnload(
-	_In_ DRIVER_OBJECT* driverObject
+WCP_DriverUnload(
+	IN WDFDRIVER driver
 ) {
 
 	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "UNLOADING WinCap DRIVER\n");
 
-	UNREFERENCED_PARAMETER(driverObject);
+	UNREFERENCED_PARAMETER(driver);
 
 	WCP_UnregisterCallouts();
 	WCP_FreeInjectionHandles();
 
-	UNICODE_STRING symLink;
-	RtlInitUnicodeString(&symLink, deviceSymLinkBuffer);
-
-	IoDeleteSymbolicLink(&symLink);
-	IoDeleteDevice(driverObject->DeviceObject);
-
 
 }
 
-// will be called whenever an application uses CreateFile do communicate with the driver
-NTSTATUS WCP_OpenAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp) {
-	UNREFERENCED_PARAMETER(Irp);
-	UNREFERENCED_PARAMETER(pDeviceObject);
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IRP MJ CREATE received.\n");
-	return STATUS_SUCCESS;
+VOID
+WCP_FileCreate(
+	IN WDFDEVICE            device,
+	IN WDFREQUEST			request,
+	IN WDFFILEOBJECT        fileObject
+) {
+	NTSTATUS status = STATUS_SUCCESS;
+
+	UNREFERENCED_PARAMETER(fileObject);
+	UNREFERENCED_PARAMETER(device);
+
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_FileCreate called\n");
+
+	WdfRequestComplete(request, status);
+
+	return;
 }
 
-// will be called whenever an application uses CloseHandle
-NTSTATUS WCP_CloseAdapter(PDEVICE_OBJECT pDeviceObject, PIRP Irp) {
-	UNREFERENCED_PARAMETER(Irp);
-	UNREFERENCED_PARAMETER(pDeviceObject);
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IRP MJ CLOSE received.\n");
-	return STATUS_SUCCESS;
+VOID
+WCP_FileClose(
+	IN WDFFILEOBJECT    fileObject
+) {
+	UNREFERENCED_PARAMETER(fileObject);
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_FileClose called\n");
+	return;
 }
 
-// will be called whenever an application calls DeviceIoControl
-NTSTATUS WCP_IoControl(PDEVICE_OBJECT pDeviceObject, PIRP Irp) {
-	UNREFERENCED_PARAMETER(pDeviceObject);
-	PIO_STACK_LOCATION pIoStackLocation;
-	PCHAR welcome = "Hello from kerneland.";
-	PVOID pBuf = Irp->AssociatedIrp.SystemBuffer;
+VOID WCP_Shutdown(WDFDEVICE Device) {
+	UNREFERENCED_PARAMETER(Device);
+	return;
+}
 
-	pIoStackLocation = IoGetCurrentIrpStackLocation(Irp);
-	switch (pIoStackLocation->Parameters.DeviceIoControl.IoControlCode) {
-	case IOCTL_INSPECT_SHAREBUFFERLIST:
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IOCTL HELLO.\n");
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Message received : %s\n", pBuf);
+VOID
+WCP_IoDeviceControl(
+	IN WDFQUEUE         queue,
+	IN WDFREQUEST       request,
+	IN size_t           outputBufferLength,
+	IN size_t           inputBufferLength,
+	IN ULONG            ioControlCode
+) {
+	PINVERTED_DEVICE_CONTEXT devContext;
+	NTSTATUS status;
+	ULONG_PTR info;
 
-		RtlZeroMemory(pBuf, pIoStackLocation->Parameters.DeviceIoControl.InputBufferLength);
-		RtlCopyMemory(pBuf, welcome, strlen(welcome));
+	UNREFERENCED_PARAMETER(outputBufferLength);
+	UNREFERENCED_PARAMETER(inputBufferLength);
 
+	devContext = InvertedGetContextFromDevice(WdfIoQueueGetDevice(queue));
+
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FileEvtIoDeviceControl called\n");
+
+	status = STATUS_INVALID_PARAMETER;
+	info = 0;
+
+	switch (ioControlCode) {
+	case IOCTL_INVERT_NOTIFICATION:
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "received IOCTL_INVERT_NOTIFICATION\n");
+		if (outputBufferLength < sizeof(LONG)) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "OutputBufferLength too small\n");
+			break;
+		}
+		status = WdfRequestForwardToIoQueue(request, devContext->NotificationQueue);
+		if (!NT_SUCCESS(status)) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfRequestForwardToIoQueue failed\n");
+			break;
+		}
+		InvertedNotify(devContext); // for testing, we could just complete the request here
+		// the request keeps pending, that's why we return
+		return;
+	default:
+
+		//
+		// The specified I/O control code is unrecognized by this driver.
+		//
+		status = STATUS_INVALID_DEVICE_REQUEST;
 		break;
 	}
 
-	// Finish the I/O operation by simply completing the packet and returning
-	// the same status as in the packet itself.
-	Irp->IoStatus.Status = STATUS_SUCCESS;
-	Irp->IoStatus.Information = strlen(welcome);
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	WdfRequestComplete(request, status);
+}
 
-	return STATUS_SUCCESS;
+VOID InvertedNotify(PINVERTED_DEVICE_CONTEXT devContext) {
+	NTSTATUS status;
+	ULONG_PTR info;
+	WDFREQUEST notifyRequest;
+	PULONG  bufferPointer;
+	LONG valueToReturn;
+
+	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &notifyRequest);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed\n");
+		return;
+	}
+
+	status = WdfRequestRetrieveOutputBuffer(notifyRequest,
+		sizeof(LONG), //here we have to specify the size of the buffer we are sending (e.g. size of the NetBufferList)
+		(PVOID*)&bufferPointer,
+		NULL);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfRequestRetrieveOutputBuffer failed\n");
+		status = STATUS_SUCCESS;
+		info = 0;
+
+	}
+	else {
+
+		valueToReturn = InterlockedExchangeAdd(&devContext->Sequence, 1);
+		*bufferPointer = valueToReturn;
+
+		status = STATUS_SUCCESS;
+		info = sizeof(LONG);
+	}
+
+	WdfRequestCompleteWithInformation(notifyRequest, status, info);
 }
 
 NTSTATUS
-WCP_InitDriverObjects(
-	_Inout_ DRIVER_OBJECT* driverObject
+WCP_DeviceAdd(
+	IN WDFDRIVER driver,
+	IN PWDFDEVICE_INIT deviceInit
 ) {
+	NTSTATUS						status;
+	WDF_OBJECT_ATTRIBUTES			attributes;
+	WDF_IO_QUEUE_CONFIG				ioQueueConfig;
+	WDF_FILEOBJECT_CONFIG			fileConfig;
+	WDFQUEUE                        queue;
+	WDFDEVICE						controlDevice;
+	PINVERTED_DEVICE_CONTEXT		devContext;
+	DECLARE_CONST_UNICODE_STRING(ntDeviceName, L"\\Device\\WinCap");
+	DECLARE_CONST_UNICODE_STRING(symbolicLinkName, L"\\DosDevices\\WinCap");
 
-	//const WCHAR deviceNameBuffer[] = L"WinCap";
-	//const WCHAR deviceSymLinkBuffer[] = L"WinCap";
 
-	NTSTATUS status = 0;
-	UNICODE_STRING deviceNameUnicodeString, deviceSymLinkUnicodeString;
-	// Normalize name and symbolic link.
-	RtlInitUnicodeString(&deviceNameUnicodeString,
-		deviceNameBuffer);
-	RtlInitUnicodeString(&deviceSymLinkUnicodeString,
-		deviceSymLinkBuffer);
-	// Create the device.
-	status = IoCreateDevice(driverObject,
-		0, // For driver extension
-		&deviceNameUnicodeString,
-		FILE_DEVICE_UNKNOWN,
-		FILE_DEVICE_UNKNOWN,
-		FALSE,
-		&gWdmDevice);
+	UNREFERENCED_PARAMETER(driver);
+
+	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+	WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE(&attributes, INVERTED_DEVICE_CONTEXT);
+
+	WdfDeviceInitSetIoType(deviceInit, WdfDeviceIoBuffered);
+
+	status = WdfDeviceInitAssignName(deviceInit, &ntDeviceName);
 	if (!NT_SUCCESS(status)) {
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IoCreateDevice failed: %x\n", status);
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfDeviceInitAssignName failed\n");
 		goto Exit;
 	}
 
-	// Create the symbolic link
-	status = IoCreateSymbolicLink(&deviceSymLinkUnicodeString,
-		&deviceNameUnicodeString);
+	WdfControlDeviceInitSetShutdownNotification(deviceInit,
+		WCP_Shutdown,
+		WdfDeviceShutdown);
+
+	WDF_FILEOBJECT_CONFIG_INIT(
+		&fileConfig,
+		WCP_FileCreate,
+		WCP_FileClose,
+		WDF_NO_EVENT_CALLBACK // not interested in Cleanup
+	);
+
+	WdfDeviceInitSetFileObjectConfig(deviceInit,
+		&fileConfig,
+		WDF_NO_OBJECT_ATTRIBUTES);
+
+	status = WdfDeviceCreate(&deviceInit,
+		&attributes,
+		&controlDevice);
 	if (!NT_SUCCESS(status)) {
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IoCreateSymbolicLink failed: %x\n", status);
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfDeviceCreate failed\n");
 		goto Exit;
 	}
 
-	driverObject->DriverUnload = WCP_EvtDriverUnload;
-	driverObject->MajorFunction[IRP_MJ_CREATE] = WCP_OpenAdapter;
-	driverObject->MajorFunction[IRP_MJ_CLOSE] = WCP_CloseAdapter;
-	driverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = WCP_IoControl;
+	devContext = InvertedGetContextFromDevice(controlDevice);
+	devContext->Sequence = 1;
+
+	status = WdfDeviceCreateSymbolicLink(controlDevice, &symbolicLinkName);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfDeviceCreateSymbolicLink failed\n");
+		goto Exit;
+	}
+
+	// for the requests, multiple requests are allowed
+	WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&ioQueueConfig, WdfIoQueueDispatchParallel);
+	ioQueueConfig.EvtIoDeviceControl = WCP_IoDeviceControl;
+	ioQueueConfig.PowerManaged = WdfFalse;
+
+	status = WdfIoQueueCreate(controlDevice,
+		&ioQueueConfig,
+		WDF_NO_OBJECT_ATTRIBUTES,
+		WDF_NO_HANDLE
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueDispatchParallel-WdfIoQueueCreate failed\n");
+		return(status);
+	}
+
+	WDF_IO_QUEUE_CONFIG_INIT(&ioQueueConfig, WdfIoQueueDispatchManual);
+	ioQueueConfig.PowerManaged = WdfFalse;
+
+	status = WdfIoQueueCreate(controlDevice,
+		&ioQueueConfig,
+		WDF_NO_OBJECT_ATTRIBUTES,
+		&devContext->NotificationQueue);
+
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueDispatchManual-WdfIoQueueCreate failed\n");
+		return(status);
+	}
+
+	WdfControlFinishInitializing(controlDevice);
 
 	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully ADDED WinCap DRIVER v0.01\n");
 	return STATUS_SUCCESS;
 
 Exit:
+	if (deviceInit != NULL) {
+		WdfDeviceInitFree(deviceInit);
+	}
 	return status;
 }
 
@@ -1121,27 +1238,57 @@ NTSTATUS
 DriverEntry(
 	DRIVER_OBJECT* driverObject,
 	UNICODE_STRING* registryPath
-)
-{
+) {
+	NTSTATUS                       status;
+	WDF_DRIVER_CONFIG              config;
+	WDFDRIVER                      hDriver;
+	PWDFDEVICE_INIT                pInit = NULL;
+	WDF_OBJECT_ATTRIBUTES          attributes;
+
 	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Joined Driver Entry\n");
-	NTSTATUS status;
 
 	// Request NX Non-Paged Pool when available
 	ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
 
-	status = WCP_InitDriverObjects(driverObject);
+	WDF_DRIVER_CONFIG_INIT(
+		&config,
+		WDF_NO_EVENT_CALLBACK // This is a non-pnp driver.
+	);
+	config.DriverInitFlags |= WdfDriverInitNonPnpDriver;
+	config.EvtDriverUnload = WCP_DriverUnload;
 
+	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+
+	status = WdfDriverCreate(driverObject,
+		registryPath,
+		&attributes,
+		&config,
+		&hDriver);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfDriverCreate failed\n");
+		return status;
+	}
+
+	pInit = WdfControlDeviceInitAllocate(
+		hDriver,
+		&SDDL_DEVOBJ_SYS_ALL_ADM_RWX_WORLD_RW_RES_R
+	);
+	if (pInit == NULL) {
+		status = STATUS_INSUFFICIENT_RESOURCES;
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfControlDeviceInitAllocate failed\n");
+		return status;
+	}	
+
+	status = WCP_DeviceAdd(driverObject, pInit);
 	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 
 	//status = WCP_InitInjectionHandles();
-
 	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
-
-	//WCP_RegisterCallouts(gWdmDevice);
+	//status = WCP_RegisterCallouts(gWdmDevice);
 
 Exit:
 

@@ -9,6 +9,7 @@
 
 #include <Ndis.h>
 #include <fwpsk.h>
+#include <wdf.h>
 
 #pragma warning(pop)
 
@@ -181,5 +182,31 @@ WCP_ShareClonedNetBufferList(
 	PNET_BUFFER_LIST clonedNetBufferList,
 	BOOLEAN bSelfSent
 );
+
+//****************** Inverted Call Method related
+
+typedef struct _INVERTED_DEVICE_CONTEXT {
+	WDFQUEUE    NotificationQueue;
+	LONG		Sequence;
+} INVERTED_DEVICE_CONTEXT, *PINVERTED_DEVICE_CONTEXT;
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(INVERTED_DEVICE_CONTEXT, InvertedGetContextFromDevice)
+
+NTSTATUS
+WCP_DeviceAdd(
+	IN WDFDRIVER Driver,
+	IN PWDFDEVICE_INIT DeviceInit
+);
+
+EVT_WDF_DRIVER_UNLOAD WCP_DriverUnload;
+EVT_WDF_DEVICE_SHUTDOWN_NOTIFICATION WCP_Shutdown;
+EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL WCP_IoDeviceControl;
+EVT_WDF_IO_IN_CALLER_CONTEXT WCP_DeviceIoInCallerContext;
+EVT_WDF_DEVICE_FILE_CREATE WCP_FileCreate;
+//EVT_WDF_IO_QUEUE_IO_WRITE WCP_IoWrite;
+//EVT_WDF_IO_QUEUE_IO_READ WCP_IoRead;
+EVT_WDF_FILE_CLOSE WCP_FileClose;
+
+VOID InvertedNotify(PINVERTED_DEVICE_CONTEXT DevContext);
 
 #endif // _INSPECT_H_

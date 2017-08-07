@@ -6,23 +6,20 @@
 //#include "stdafx.h"
 
 #include <Ndis.h>
-#include <Wdm.h>
-//#include <wdf.h>
+#include <wdf.h>
 #include "wincap.h"
 
 #define SIOCTL_TYPE 40000
 #define IOCTL_INVERT_NOTIFICATION CTL_CODE(SIOCTL_TYPE, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
-/*
-* The number of bytes in an Ethernet (MAC) address.
-*/
-#define	ETHER_ADDR_LEN		6
-/*
-* The number of bytes in the type field.
-*/
-#define	ETHER_TYPE_LEN		2
 
-#define	ETHER_HDR_LEN		(ETHER_ADDR_LEN * 2 + ETHER_TYPE_LEN)
+//The number of bytes in an Ethernet (MAC) address.
+#define	ETHER_ADDR_LEN 6
+
+//The number of bytes in the type field.
+#define	ETHER_TYPE_LEN 2
+
+#define	ETHER_HDR_LEN (ETHER_ADDR_LEN * 2 + ETHER_TYPE_LEN)
 
 ULONG g_DltNullMode = 0;
 /*
@@ -36,21 +33,10 @@ typedef struct _DLT_NULL_HEADER {
 * The length of the combined header.
 */
 #define	DLT_NULL_HDR_LEN	sizeof(DLT_NULL_HEADER)
-//#define NPCAP_CALLOUT_DRIVER_TAG (UINT32) 'NPCA'
-//#define	DLTNULLTYPE_IP		0x00000002	/* IP protocol */
-//#define	DLTNULLTYPE_IPV6	0x00000018	/* IPv6 */
-
-// 
-// Global variables
-//
-//extern POPEN_INSTANCE g_LoopbackOpenGroupHead; // Loopback adapter open_instance group head, this pointer points to one item in g_arrOpen list.
-//extern ULONG g_DltNullMode;
-
 
 // 
 // Callout and sublayer GUIDs
 //
-
 
 //#ifdef WCP_NPCAP_RUN_IN_WINPCAP_MODE
 // 2D605B3E-C244-4364-86E8-BD81E6C91B6D
@@ -146,7 +132,6 @@ WCP_SUBLAYER,
 
 DEVICE_OBJECT* gWdmDevice;
 
-//HANDLE g_WFPEngineHandle = INVALID_HANDLE_VALUE;
 UINT32 g_OutboundIPPacketV4 = 0;
 UINT32 g_OutboundIPPacketV6 = 0;
 UINT32 g_InboundIPPacketV4 = 0;
@@ -183,7 +168,7 @@ WCP_IsPacketSelfSent(
 		} else {
 			uProto = bIPv4 ? ((PIP_HEADER)pContiguousData)->ip_Protocol : ((PIP6_HEADER)pContiguousData)->ip6_CTL.ip6_HeaderCtl.ip6_NextHeader;
 			*puProto = uProto;
-			if (uProto == IPPROTO_NPCAP_LOOPBACK) {
+			if (uProto == IPPROTO_WINCAP_LOOPBACK) {
 				*pbInnerIPv4 = bIPv4;
 
 				return TRUE;
@@ -271,10 +256,10 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOL
 	while (pNetBuffer) {
 		ULONG length = pNetBuffer->DataLength;
 		if (bSelfSent) {
-			//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Sending package with the length: %lu\n", length);
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Sending package with the length: %lu\n", length);
 		}
 		else {
-			//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Receiving package with the length: %lu\n", length);
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Receiving package with the length: %lu\n", length);
 		}
 		pNetBuffer = pNetBuffer->Next;
 	}
@@ -517,6 +502,7 @@ WCP_NetworkClassify(
 	}
 	*/
 
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "sharing data...\n");
 	WCP_ShareClonedNetBufferList(pClonedNetBufferList, bSelfSent);
 
 	// Send the loopback packets data to the user-mode code.
@@ -588,9 +574,6 @@ WCP_NetworkNotify(
 	return STATUS_SUCCESS;
 }
 
-// 
-// Callout driver implementation
-//
 
 NTSTATUS WCP_AddFilter(
 	_In_ const GUID* layerKey,
@@ -685,7 +668,6 @@ NTSTATUS WCP_AddFilter(
 		NULL,
 		NULL);
 
-
 	return status;
 }
 
@@ -727,6 +709,7 @@ NTSTATUS WCP_RegisterCallout(
 		calloutId
 	);
 	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpsCalloutRegister failed with status: 0x%0x\n", status);
 		goto Exit;
 	}
 	calloutRegistered = TRUE;
@@ -745,11 +728,13 @@ NTSTATUS WCP_RegisterCallout(
 		NULL
 	);
 	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpmCalloutAdd failed with status: 0x%0x\n", status);
 		goto Exit;
 	}
 
 	status = WCP_AddFilter(layerKey, calloutKey);
 	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_AddFilter failed with status: 0x%0x\n", status);
 		goto Exit;
 	}
 	/*
@@ -797,6 +782,7 @@ NTSTATUS WCP_RegisterCallouts(
 	Callouts and filters will be removed during DriverUnload.
 
 	-- */
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "registering callouts\n");
 	NTSTATUS status = STATUS_SUCCESS;
 	FWPM_SUBLAYER NPFSubLayer;
 
@@ -815,6 +801,7 @@ NTSTATUS WCP_RegisterCallouts(
 		&gWdmDevice
 	);
 	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpmEngineOpen failed\n");
 		goto Exit;
 	}
 	engineOpened = TRUE;
@@ -838,6 +825,7 @@ NTSTATUS WCP_RegisterCallouts(
 
 	status = FwpmSubLayerAdd(gWdmDevice, &NPFSubLayer, NULL);
 	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpmSubLayerAdd failed\n");
 		goto Exit;
 	}
 
@@ -850,6 +838,7 @@ NTSTATUS WCP_RegisterCallouts(
 			&g_OutboundIPPacketV4
 		);
 		if (!NT_SUCCESS(status)) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_IPV4_1 failed with status: 0x%0x\n", status);
 			goto Exit;
 		}
 
@@ -860,6 +849,7 @@ NTSTATUS WCP_RegisterCallouts(
 			&g_InboundIPPacketV4
 		);
 		if (!NT_SUCCESS(status)) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_IPV4_2 with status: 0x%0x\n", status);
 			goto Exit;
 		}
 	}
@@ -872,6 +862,7 @@ NTSTATUS WCP_RegisterCallouts(
 			&g_OutboundIPPacketV6
 		);
 		if (!NT_SUCCESS(status)) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_IPV6 with status: 0x%0x\n", status);
 			goto Exit;
 		}
 
@@ -882,16 +873,19 @@ NTSTATUS WCP_RegisterCallouts(
 			&g_InboundIPPacketV6
 		);
 		if (!NT_SUCCESS(status)) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_IPV6 failed with status: 0x%0x\n", status);
 			goto Exit;
 		}
 	}
 
 	status = FwpmTransactionCommit(gWdmDevice);
 	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpmTransactionCommit failed with status: 0x%0x\n", status);
 		goto Exit;
 	}
 	inTransaction = FALSE;
 
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully registered callbacks");
 Exit:
 
 	if (!NT_SUCCESS(status)) {
@@ -1224,6 +1218,9 @@ WCP_DeviceAdd(
 
 	WdfControlFinishInitializing(controlDevice);
 
+	//retrieve the wdm device for the Callout-Functions
+	gWdmDevice = WdfDeviceWdmGetDeviceObject(controlDevice);
+
 	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully ADDED WinCap DRIVER v0.01\n");
 	return STATUS_SUCCESS;
 
@@ -1236,14 +1233,15 @@ Exit:
 
 NTSTATUS
 DriverEntry(
-	DRIVER_OBJECT* driverObject,
-	UNICODE_STRING* registryPath
+	IN OUT PDRIVER_OBJECT driverObject,
+	IN PUNICODE_STRING registryPath
 ) {
-	NTSTATUS                       status;
-	WDF_DRIVER_CONFIG              config;
-	WDFDRIVER                      hDriver;
-	PWDFDEVICE_INIT                pInit = NULL;
-	WDF_OBJECT_ATTRIBUTES          attributes;
+	NTSTATUS						status;
+	WDF_DRIVER_CONFIG				config;
+	WDFDRIVER						hDriver;
+	WDFDEVICE						device;
+	PWDFDEVICE_INIT					pInit = NULL;
+	WDF_OBJECT_ATTRIBUTES			attributes;
 
 	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Joined Driver Entry\n");
 
@@ -1279,16 +1277,18 @@ DriverEntry(
 		return status;
 	}	
 
-	status = WCP_DeviceAdd(driverObject, pInit);
+	status = WCP_DeviceAdd(hDriver, pInit);
 	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
 
-	//status = WCP_InitInjectionHandles();
+	status = WCP_InitInjectionHandles();
 	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
-	//status = WCP_RegisterCallouts(gWdmDevice);
+
+
+	status = WCP_RegisterCallouts(gWdmDevice);
 
 Exit:
 

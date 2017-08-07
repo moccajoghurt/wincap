@@ -22,16 +22,10 @@
 #define INITGUID
 #include <guiddef.h>
 
-#define IPPROTO_NPCAP_LOOPBACK		250
-
-//
-// Protocol headers
-//
+#define IPPROTO_WINCAP_LOOPBACK		250
 
 #pragma pack(push)
 #pragma pack (1)
-
-//#include "macros.h"
 
 /*
 * Structure of a IPv4 header, based on netinet/ip.h
@@ -166,16 +160,13 @@ WCP_RegisterCallouts(
 );
 
 void
-WCP_UnregisterCallouts(
-);
+WCP_UnregisterCallouts();
 
 NTSTATUS
-WCP_InitInjectionHandles(
-);
+WCP_InitInjectionHandles();
 
 NTSTATUS
-WCP_FreeInjectionHandles(
-);
+WCP_FreeInjectionHandles();
 
 NTSTATUS
 WCP_ShareClonedNetBufferList(
@@ -203,8 +194,6 @@ EVT_WDF_DEVICE_SHUTDOWN_NOTIFICATION WCP_Shutdown;
 EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL WCP_IoDeviceControl;
 EVT_WDF_IO_IN_CALLER_CONTEXT WCP_DeviceIoInCallerContext;
 EVT_WDF_DEVICE_FILE_CREATE WCP_FileCreate;
-//EVT_WDF_IO_QUEUE_IO_WRITE WCP_IoWrite;
-//EVT_WDF_IO_QUEUE_IO_READ WCP_IoRead;
 EVT_WDF_FILE_CLOSE WCP_FileClose;
 
 VOID InvertedNotify(PINVERTED_DEVICE_CONTEXT DevContext);

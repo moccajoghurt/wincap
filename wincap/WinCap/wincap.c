@@ -256,10 +256,10 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOL
 	while (pNetBuffer) {
 		ULONG length = pNetBuffer->DataLength;
 		if (bSelfSent) {
-			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Sending package with the length: %lu\n", length);
+			//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Sending package with the length: %lu\n", length);
 		}
 		else {
-			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Receiving package with the length: %lu\n", length);
+			//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Receiving package with the length: %lu\n", length);
 		}
 		pNetBuffer = pNetBuffer->Next;
 	}
@@ -502,7 +502,6 @@ WCP_NetworkClassify(
 	}
 	*/
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "sharing data...\n");
 	WCP_ShareClonedNetBufferList(pClonedNetBufferList, bSelfSent);
 
 	// Send the loopback packets data to the user-mode code.
@@ -551,7 +550,7 @@ Exit_WSK_IP_Retreated:
 		// 		}
 	}
 
-	/*Exit_IP_Retreated:*/
+	//Exit_IP_Retreated:
 	NdisAdvanceNetBufferListDataStart(pNetBufferList,
 		bytesRetreated,
 		FALSE,

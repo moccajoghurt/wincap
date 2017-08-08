@@ -130,6 +130,7 @@ WCP_SUBLAYER,
 // Callout driver global variables
 //
 
+WDFDEVICE*  pWdfDevice;
 DEVICE_OBJECT* gWdmDevice;
 
 UINT32 g_OutboundIPPacketV4 = 0;
@@ -248,10 +249,12 @@ VOID WCP_NetworkInjectionComplete(
 }
 
 NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOLEAN bSelfSent) {
+	/*
 	NTSTATUS status = STATUS_SUCCESS;
-
 	NET_BUFFER* pNetBuffer;
 	pNetBuffer = NET_BUFFER_LIST_FIRST_NB(clonedNetBufferList);
+
+	//clonedNetBufferList->FirstNetBuffer->MdlChain
 
 	while (pNetBuffer) {
 		ULONG length = pNetBuffer->DataLength;
@@ -263,8 +266,104 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOL
 		}
 		pNetBuffer = pNetBuffer->Next;
 	}
+	*/
+	PNET_BUFFER_LIST	pRcvNetBufList;
+	PLIST_ENTRY			pRcvNetBufListEntry;
+	PUCHAR				pSrc, pDst;
+	ULONG				BytesRemaining; // at pDst
+	PMDL				pMdl;
+	ULONG				BytesAvailable;
+	NTSTATUS			status = STATUS_UNSUCCESSFUL;
+	WDFREQUEST			request;
+	ULONG				bytesCopied = 0, totalLength;
+	PINVERTED_DEVICE_CONTEXT devContext;
+
+	devContext = InvertedGetContextFromDevice(*pWdfDevice);
+	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &request);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed\n");
+		return status;
+	}
+
+	status = WdfRequestRetrieveOutputWdmMdl(request, &pMdl);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfRequestRetrieveOutputWdmMdl failed\n");
+		return status;
+	}
+
+	pDst = MmGetSystemAddressForMdlSafe(pMdl, NormalPagePriority | MdlMappingNoExecute);
+	if (pDst == NULL) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "MmGetSystemAddressForMdlSafe failed\n");
+		status = STATUS_INSUFFICIENT_RESOURCES;
+		return status;
+	}
+
+
+	pRcvNetBufList = clonedNetBufferList;
+	totalLength = BytesRemaining = MmGetMdlByteCount(pMdl);
+	pMdl = pRcvNetBufList->FirstNetBuffer->MdlChain;
+
+	while (BytesRemaining && (pMdl != NULL)) {
+		pSrc = NULL;
+		NdisQueryMdl(pMdl, &pSrc, &BytesAvailable, NormalPagePriority | MdlMappingNoExecute);
+		if (pSrc == NULL) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "NdisQueryMdl failed for MDL %p\n", pMdl);
+			break;
+		}
+
+		if (BytesAvailable) {
+			ULONG BytesToCopy = (BytesAvailable < BytesRemaining) ? BytesAvailable : BytesRemaining;
+
+			NdisMoveMemory(pDst, pSrc, BytesToCopy);
+			BytesRemaining -= BytesToCopy;
+			pDst += BytesToCopy;
+		}
+
+		NdisGetNextMdl(pMdl, &pMdl);
+	}
+
+	bytesCopied = totalLength - BytesRemaining;
+	WdfRequestCompleteWithInformation(request, STATUS_SUCCESS, bytesCopied);
+
 	return status;
 }
+
+/*
+VOID InvertedNotify(PINVERTED_DEVICE_CONTEXT devContext) {
+	NTSTATUS status;
+	ULONG_PTR info;
+	WDFREQUEST notifyRequest;
+	PULONG  bufferPointer;
+	LONG valueToReturn;
+
+	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &notifyRequest);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed\n");
+		return;
+	}
+
+	status = WdfRequestRetrieveOutputBuffer(notifyRequest,
+		sizeof(LONG), //here we have to specify the size of the buffer we are sending (e.g. size of the NetBufferList)
+		(PVOID*)&bufferPointer,
+		NULL);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfRequestRetrieveOutputBuffer failed\n");
+		status = STATUS_SUCCESS;
+		info = 0;
+
+	}
+	else {
+
+		valueToReturn = InterlockedExchangeAdd(&devContext->Sequence, 1);
+		*bufferPointer = valueToReturn;
+
+		status = STATUS_SUCCESS;
+		info = sizeof(LONG);
+	}
+
+	WdfRequestCompleteWithInformation(notifyRequest, status, info);
+}
+*/
 
 //
 // Callout driver functions
@@ -1076,7 +1175,7 @@ WCP_IoDeviceControl(
 			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfRequestForwardToIoQueue failed\n");
 			break;
 		}
-		InvertedNotify(devContext); // for testing, we could just complete the request here
+		//InvertedNotify(devContext); // for testing, we could just complete the request here
 		// the request keeps pending, that's why we return
 		return;
 	default:
@@ -1091,40 +1190,6 @@ WCP_IoDeviceControl(
 	WdfRequestComplete(request, status);
 }
 
-VOID InvertedNotify(PINVERTED_DEVICE_CONTEXT devContext) {
-	NTSTATUS status;
-	ULONG_PTR info;
-	WDFREQUEST notifyRequest;
-	PULONG  bufferPointer;
-	LONG valueToReturn;
-
-	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &notifyRequest);
-	if (!NT_SUCCESS(status)) {
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed\n");
-		return;
-	}
-
-	status = WdfRequestRetrieveOutputBuffer(notifyRequest,
-		sizeof(LONG), //here we have to specify the size of the buffer we are sending (e.g. size of the NetBufferList)
-		(PVOID*)&bufferPointer,
-		NULL);
-	if (!NT_SUCCESS(status)) {
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfRequestRetrieveOutputBuffer failed\n");
-		status = STATUS_SUCCESS;
-		info = 0;
-
-	}
-	else {
-
-		valueToReturn = InterlockedExchangeAdd(&devContext->Sequence, 1);
-		*bufferPointer = valueToReturn;
-
-		status = STATUS_SUCCESS;
-		info = sizeof(LONG);
-	}
-
-	WdfRequestCompleteWithInformation(notifyRequest, status, info);
-}
 
 NTSTATUS
 WCP_DeviceAdd(
@@ -1177,6 +1242,7 @@ WCP_DeviceAdd(
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfDeviceCreate failed\n");
 		goto Exit;
 	}
+	pWdfDevice = &controlDevice;
 
 	devContext = InvertedGetContextFromDevice(controlDevice);
 	devContext->Sequence = 1;

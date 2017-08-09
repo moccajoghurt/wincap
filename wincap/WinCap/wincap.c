@@ -130,8 +130,9 @@ WCP_SUBLAYER,
 // Callout driver global variables
 //
 
-WDFDEVICE*  pWdfDevice;
 DEVICE_OBJECT* gWdmDevice;
+WDFDEVICE controlDevice;
+//WDFDEVICE *pWdfDevice;
 
 UINT32 g_OutboundIPPacketV4 = 0;
 UINT32 g_OutboundIPPacketV6 = 0;
@@ -248,25 +249,8 @@ VOID WCP_NetworkInjectionComplete(
 	return;
 }
 
-NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOLEAN bSelfSent) {
-	/*
-	NTSTATUS status = STATUS_SUCCESS;
-	NET_BUFFER* pNetBuffer;
-	pNetBuffer = NET_BUFFER_LIST_FIRST_NB(clonedNetBufferList);
-
-	//clonedNetBufferList->FirstNetBuffer->MdlChain
-
-	while (pNetBuffer) {
-		ULONG length = pNetBuffer->DataLength;
-		if (bSelfSent) {
-			//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Sending package with the length: %lu\n", length);
-		}
-		else {
-			//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Receiving package with the length: %lu\n", length);
-		}
-		pNetBuffer = pNetBuffer->Next;
-	}
-	*/
+NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOOLEAN bSelfSent) {
+	
 	PNET_BUFFER_LIST	pRcvNetBufList;
 	PLIST_ENTRY			pRcvNetBufListEntry;
 	PUCHAR				pSrc, pDst;
@@ -274,18 +258,23 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOL
 	PMDL				pMdl;
 	ULONG				BytesAvailable;
 	NTSTATUS			status = STATUS_UNSUCCESSFUL;
-	WDFREQUEST			request;
+	WDFREQUEST			wdfIoQueueRequest;
 	ULONG				bytesCopied = 0, totalLength;
 	PINVERTED_DEVICE_CONTEXT devContext;
 
-	devContext = InvertedGetContextFromDevice(*pWdfDevice);
-	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &request);
+	devContext = InvertedGetContextFromDevice(controlDevice);
+
+	//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "devContext %x\n", devContext);
+	//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "using queue %x\n", devContext->NotificationQueue);
+	
+	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &wdfIoQueueRequest);
 	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed\n");
 		return status;
 	}
-
-	status = WdfRequestRetrieveOutputWdmMdl(request, &pMdl);
+	
+	
+	status = WdfRequestRetrieveOutputWdmMdl(wdfIoQueueRequest, &pMdl);
 	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfRequestRetrieveOutputWdmMdl failed\n");
 		return status;
@@ -299,7 +288,7 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOL
 	}
 
 
-	pRcvNetBufList = clonedNetBufferList;
+	pRcvNetBufList = pClonedNetBufferList;
 	totalLength = BytesRemaining = MmGetMdlByteCount(pMdl);
 	pMdl = pRcvNetBufList->FirstNetBuffer->MdlChain;
 
@@ -323,8 +312,8 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST clonedNetBufferList, BOOL
 	}
 
 	bytesCopied = totalLength - BytesRemaining;
-	WdfRequestCompleteWithInformation(request, STATUS_SUCCESS, bytesCopied);
-
+	WdfRequestCompleteWithInformation(wdfIoQueueRequest, STATUS_SUCCESS, bytesCopied);
+	
 	return status;
 }
 
@@ -601,6 +590,7 @@ WCP_NetworkClassify(
 	}
 	*/
 
+	//send data to usermode
 	WCP_ShareClonedNetBufferList(pClonedNetBufferList, bSelfSent);
 
 	// Send the loopback packets data to the user-mode code.
@@ -983,7 +973,7 @@ NTSTATUS WCP_RegisterCallouts(
 	}
 	inTransaction = FALSE;
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully registered callbacks");
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully registered callbacks\n");
 Exit:
 
 	if (!NT_SUCCESS(status)) {
@@ -1201,7 +1191,7 @@ WCP_DeviceAdd(
 	WDF_IO_QUEUE_CONFIG				ioQueueConfig;
 	WDF_FILEOBJECT_CONFIG			fileConfig;
 	WDFQUEUE                        queue;
-	WDFDEVICE						controlDevice;
+	//WDFDEVICE						controlDevice;
 	PINVERTED_DEVICE_CONTEXT		devContext;
 	DECLARE_CONST_UNICODE_STRING(ntDeviceName, L"\\Device\\WinCap");
 	DECLARE_CONST_UNICODE_STRING(symbolicLinkName, L"\\DosDevices\\WinCap");
@@ -1242,7 +1232,6 @@ WCP_DeviceAdd(
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfDeviceCreate failed\n");
 		goto Exit;
 	}
-	pWdfDevice = &controlDevice;
 
 	devContext = InvertedGetContextFromDevice(controlDevice);
 	devContext->Sequence = 1;
@@ -1285,6 +1274,7 @@ WCP_DeviceAdd(
 
 	//retrieve the wdm device for the Callout-Functions
 	gWdmDevice = WdfDeviceWdmGetDeviceObject(controlDevice);
+	//pWdfDevice = controlDevice;
 
 	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully ADDED WinCap DRIVER v0.01\n");
 	return STATUS_SUCCESS;

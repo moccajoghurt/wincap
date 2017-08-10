@@ -18,24 +18,24 @@ int __cdecl main(int argc, char* argv[]) {
 
 	hDevice = CreateFile("\\\\.\\WinCap", GENERIC_WRITE|GENERIC_READ, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hDevice == INVALID_HANDLE_VALUE) {
-        printf("Error opening Driver (%d)\n", GetLastError());
+		printf("Error opening Driver (%d)\n", GetLastError());
 		system("pause");
-        return;
-    } else {
+		return;
+	} else {
 		printf("Handle : %p\n",hDevice);
 	}
 	
 	DeviceIoControl(hDevice, IOCTL_START_CAPTURE, NULL, 0, NULL, 0, NULL, NULL);
 	while (1) {
 		DeviceIoControl(hDevice, IOCTL_INVERT_NOTIFICATION, NULL, 0, ReadBuffer, byteCount, &dwBytesRead, NULL);
-	    for (int i = 0; i < dwBytesRead; i++) {
+		for (int i = 0; i < dwBytesRead; i++) {
 			if (*(ReadBuffer + i * sizeof(char)) == 0) {
 				printf(".");
 			} else {
 				printf("%c", *(ReadBuffer + i * sizeof(char)));
 			}
-	    }
-	    printf("\n");
+		}
+		printf("\n");
 		printf("Bytes read : %d\n", dwBytesRead);
 	}
 	

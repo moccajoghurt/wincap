@@ -1,9 +1,6 @@
 
 
 #include <ntddk.h>
-//#include <fwpsk.h>
-//#include <fwpmk.h>
-//#include "stdafx.h"
 
 #include <Ndis.h>
 #include <wdf.h>
@@ -11,6 +8,8 @@
 
 #define SIOCTL_TYPE 40000
 #define IOCTL_INVERT_NOTIFICATION CTL_CODE(SIOCTL_TYPE, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_START_CAPTURE CTL_CODE(SIOCTL_TYPE, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_STOP_CAPTURE CTL_CODE(SIOCTL_TYPE, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
 
 //The number of bytes in an Ethernet (MAC) address.
@@ -38,7 +37,6 @@ typedef struct _DLT_NULL_HEADER {
 // Callout and sublayer GUIDs
 //
 
-//#ifdef WCP_NPCAP_RUN_IN_WINPCAP_MODE
 // 2D605B3E-C244-4364-86E8-BD81E6C91B6D
 DEFINE_GUID(
 	WCP_OUTBOUND_IPPACKET_CALLOUT_V4,
@@ -80,51 +78,6 @@ DEFINE_GUID(
 	0x469b,
 	0xb9, 0x9b, 0x3e, 0x88, 0x10, 0x27, 0x5a, 0x71
 );
-//#else
-/*
-// 2D605B3E-C244-4364-86E8-BD81E6C91B6E
-DEFINE_GUID(
-WCP_OUTBOUND_IPPACKET_CALLOUT_V4,
-0x2d605b3e,
-0xc244,
-0x4364,
-0x86, 0xe8, 0xbd, 0x81, 0xe6, 0xc9, 0x1b, 0x6e
-);
-// F935E4CD-9499-4934-824D-8E3726BA4A94
-DEFINE_GUID(
-WCP_OUTBOUND_IPPACKET_CALLOUT_V6,
-0xf935e4cd,
-0x9499,
-0x4934,
-0x82, 0x4d, 0x8e, 0x37, 0x26, 0xba, 0x4a, 0x94
-);
-// ED7E5EB2-6B09-4783-961C-5495EAAD361F
-DEFINE_GUID(
-WCP_INBOUND_IPPACKET_CALLOUT_V4,
-0xed7e5eb2,
-0x6b09,
-0x4783,
-0x96, 0x1c, 0x54, 0x95, 0xea, 0xad, 0x36, 0x1f
-);
-// 21022F40-9578-4C39-98A5-C97B8D834E28
-DEFINE_GUID(
-WCP_INBOUND_IPPACKET_CALLOUT_V6,
-0x21022f40,
-0x9578,
-0x4c39,
-0x98, 0xa5, 0xc9, 0x7b, 0x8d, 0x83, 0x4e, 0x28
-);
-
-// 2F32C254-A054-469B-B99B-3E8810275A72
-DEFINE_GUID(
-WCP_SUBLAYER,
-0x2f32c254,
-0xa054,
-0x469b,
-0xb9, 0x9b, 0x3e, 0x88, 0x10, 0x27, 0x5a, 0x72
-);
-#endif
-*/
 
 // 
 // Callout driver global variables
@@ -132,7 +85,9 @@ WCP_SUBLAYER,
 
 DEVICE_OBJECT* gWdmDevice;
 WDFDEVICE controlDevice;
-//WDFDEVICE *pWdfDevice;
+
+BOOLEAN captureRunning = FALSE;
+BOOLEAN callbacksInitialized = FALSE;
 
 UINT32 g_OutboundIPPacketV4 = 0;
 UINT32 g_OutboundIPPacketV6 = 0;
@@ -181,7 +136,7 @@ WCP_IsPacketSelfSent(
 			}
 		}
 
-		pNetBuffer = pNetBuffer->Next;
+		//pNetBuffer = pNetBuffer->Next;
 	}
 
 	return FALSE;
@@ -224,7 +179,7 @@ WCP_IsICMPProtocolUnreachablePacket(
 			}
 		}
 
-		pNetBuffer = pNetBuffer->Next;
+		//pNetBuffer = pNetBuffer->Next;
 	}
 
 
@@ -250,9 +205,15 @@ VOID WCP_NetworkInjectionComplete(
 }
 
 NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOOLEAN bSelfSent) {
+
+	/*
+	* Sends a network-package to an open IOCTL-request.
+	* If the buffer of the request is too small for the package, a partial package is sent and 
+	* the rest of the network-package is ignored.
+	* If there are no IOCTL-requests available the network-package is discarded
+	*/
 	
 	PNET_BUFFER_LIST	pRcvNetBufList;
-	PLIST_ENTRY			pRcvNetBufListEntry;
 	PUCHAR				pSrc, pDst;
 	ULONG				BytesRemaining; // at pDst
 	PMDL				pMdl;
@@ -262,11 +223,10 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOO
 	ULONG				bytesCopied = 0, totalLength;
 	PINVERTED_DEVICE_CONTEXT devContext;
 
+	UNREFERENCED_PARAMETER(bSelfSent);
+
 	devContext = InvertedGetContextFromDevice(controlDevice);
 
-	//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "devContext %x\n", devContext);
-	//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "using queue %x\n", devContext->NotificationQueue);
-	
 	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &wdfIoQueueRequest);
 	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed\n");
@@ -292,6 +252,8 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOO
 	totalLength = BytesRemaining = MmGetMdlByteCount(pMdl);
 	pMdl = pRcvNetBufList->FirstNetBuffer->MdlChain;
 
+	//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "totalLength %ld\n", totalLength);
+
 	while (BytesRemaining && (pMdl != NULL)) {
 		pSrc = NULL;
 		NdisQueryMdl(pMdl, &pSrc, &BytesAvailable, NormalPagePriority | MdlMappingNoExecute);
@@ -302,7 +264,7 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOO
 
 		if (BytesAvailable) {
 			ULONG BytesToCopy = (BytesAvailable < BytesRemaining) ? BytesAvailable : BytesRemaining;
-
+			//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "data: %s\n", pSrc);
 			NdisMoveMemory(pDst, pSrc, BytesToCopy);
 			BytesRemaining -= BytesToCopy;
 			pDst += BytesToCopy;
@@ -311,48 +273,16 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOO
 		NdisGetNextMdl(pMdl, &pMdl);
 	}
 
+	// unused but might be useful in the future. usually gets sent via WdfRequestCompleteWithInformation
 	bytesCopied = totalLength - BytesRemaining;
+
+	//sub queue count
+	InterlockedExchangeAdd(&devContext->QueueCount, -1);
+	//WdfRequestCompleteWithInformation(wdfIoQueueRequest, STATUS_SUCCESS, devContext->QueueCount);
 	WdfRequestCompleteWithInformation(wdfIoQueueRequest, STATUS_SUCCESS, bytesCopied);
-	
+
 	return status;
 }
-
-/*
-VOID InvertedNotify(PINVERTED_DEVICE_CONTEXT devContext) {
-	NTSTATUS status;
-	ULONG_PTR info;
-	WDFREQUEST notifyRequest;
-	PULONG  bufferPointer;
-	LONG valueToReturn;
-
-	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &notifyRequest);
-	if (!NT_SUCCESS(status)) {
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed\n");
-		return;
-	}
-
-	status = WdfRequestRetrieveOutputBuffer(notifyRequest,
-		sizeof(LONG), //here we have to specify the size of the buffer we are sending (e.g. size of the NetBufferList)
-		(PVOID*)&bufferPointer,
-		NULL);
-	if (!NT_SUCCESS(status)) {
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfRequestRetrieveOutputBuffer failed\n");
-		status = STATUS_SUCCESS;
-		info = 0;
-
-	}
-	else {
-
-		valueToReturn = InterlockedExchangeAdd(&devContext->Sequence, 1);
-		*bufferPointer = valueToReturn;
-
-		status = STATUS_SUCCESS;
-		info = sizeof(LONG);
-	}
-
-	WdfRequestCompleteWithInformation(notifyRequest, status, info);
-}
-*/
 
 //
 // Callout driver functions
@@ -487,7 +417,6 @@ WCP_NetworkClassify(
 		return;
 	}
 
-	//bSelfSent = WCP_IsPacketSelfSent(pNetBufferList, (BOOLEAN)bIPv4);
 	bSelfSent = bInbound ? WCP_IsPacketSelfSent(pNetBufferList, bIPv4, &bInnerIPv4, &uIPProto) : FALSE;
 
 	if (bInbound && bIPv4 && !bSelfSent && uIPProto == IPPROTO_ICMP) {
@@ -559,62 +488,12 @@ WCP_NetworkClassify(
 	}
 
 	pNetBuffer = NET_BUFFER_LIST_FIRST_NB(pClonedNetBufferList);
-	/*
-	while (pNetBuffer)
-	{
-	pContiguousData = NdisGetDataBuffer(pNetBuffer,
-	bytesRetreatedEthernet,
-	pPacketData,
-	1,
-	0);
-	if (!pContiguousData)
-	{
-	status = STATUS_UNSUCCESSFUL;
 
-	goto Exit_Ethernet_Retreated;
-	}
-	else
-	{
-	if (g_DltNullMode)
-	{
-	((PDLT_NULL_HEADER)pContiguousData)->null_type = bIPv4 ? DLTNULLTYPE_IP : DLTNULLTYPE_IPV6;
-	}
-	else
-	{
-	RtlZeroMemory(pContiguousData, ETHER_ADDR_LEN * 2);
-	((PETHER_HEADER)pContiguousData)->ether_type = bIPv4 ? RtlUshortByteSwap(ETHERTYPE_IP) : RtlUshortByteSwap(ETHERTYPE_IPV6);
-	}
+	if (captureRunning) {
+		//send data to usermode
+		WCP_ShareClonedNetBufferList(pClonedNetBufferList, bSelfSent);
 	}
 
-	pNetBuffer = pNetBuffer->Next;
-	}
-	*/
-
-	//send data to usermode
-	WCP_ShareClonedNetBufferList(pClonedNetBufferList, bSelfSent);
-
-	// Send the loopback packets data to the user-mode code.
-	// Can't assert this because a sleep could happen, detaching the adapter and making this pointer invalid.
-	//ASSERT(g_LoopbackOpenGroupHead);
-	/*if (g_LoopbackOpenGroupHead) {
-
-	//Lock the group
-	NdisAcquireSpinLock(&g_LoopbackOpenGroupHead->GroupLock);
-	GroupOpen = g_LoopbackOpenGroupHead->GroupNext;
-	while (GroupOpen != NULL)
-	{
-	TempOpen = GroupOpen;
-	if (TempOpen->AdapterBindingStatus == ADAPTER_BOUND)
-	{
-	//let every group adapter receive the packets
-	WCP_TapExForEachOpen(TempOpen, pClonedNetBufferList);
-	}
-	GroupOpen = TempOpen->GroupNext;
-	}
-	NdisReleaseSpinLock(&g_LoopbackOpenGroupHead->GroupLock);
-	}
-
-	Exit_Ethernet_Retreated:*/
 	// Advance the offset back to the original position.
 	NdisAdvanceNetBufferListDataStart(pClonedNetBufferList,
 		bytesRetreatedEthernet,
@@ -631,12 +510,6 @@ Exit_WSK_IP_Retreated:
 			0,
 			NULL,
 			NULL);
-
-		// 		if (status != STATUS_SUCCESS)
-		// 		{
-		//
-		// 			goto Exit_IP_Retreated;
-		// 		}
 	}
 
 	//Exit_IP_Retreated:
@@ -870,7 +743,6 @@ NTSTATUS WCP_RegisterCallouts(
 	Callouts and filters will be removed during DriverUnload.
 
 	-- */
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "registering callouts\n");
 	NTSTATUS status = STATUS_SUCCESS;
 	FWPM_SUBLAYER NPFSubLayer;
 
@@ -973,7 +845,6 @@ NTSTATUS WCP_RegisterCallouts(
 	}
 	inTransaction = FALSE;
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully registered callbacks\n");
 Exit:
 
 	if (!NT_SUCCESS(status)) {
@@ -1089,8 +960,6 @@ WCP_DriverUnload(
 	IN WDFDRIVER driver
 ) {
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "UNLOADING WinCap DRIVER\n");
-
 	UNREFERENCED_PARAMETER(driver);
 
 	WCP_UnregisterCallouts();
@@ -1110,8 +979,6 @@ WCP_FileCreate(
 	UNREFERENCED_PARAMETER(fileObject);
 	UNREFERENCED_PARAMETER(device);
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_FileCreate called\n");
-
 	WdfRequestComplete(request, status);
 
 	return;
@@ -1122,7 +989,6 @@ WCP_FileClose(
 	IN WDFFILEOBJECT    fileObject
 ) {
 	UNREFERENCED_PARAMETER(fileObject);
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_FileClose called\n");
 	return;
 }
 
@@ -1148,14 +1014,11 @@ WCP_IoDeviceControl(
 
 	devContext = InvertedGetContextFromDevice(WdfIoQueueGetDevice(queue));
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FileEvtIoDeviceControl called\n");
-
 	status = STATUS_INVALID_PARAMETER;
 	info = 0;
 
 	switch (ioControlCode) {
 	case IOCTL_INVERT_NOTIFICATION:
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "received IOCTL_INVERT_NOTIFICATION\n");
 		if (outputBufferLength < sizeof(LONG)) {
 			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "OutputBufferLength too small\n");
 			break;
@@ -1165,9 +1028,27 @@ WCP_IoDeviceControl(
 			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfRequestForwardToIoQueue failed\n");
 			break;
 		}
-		//InvertedNotify(devContext); // for testing, we could just complete the request here
+
+		//increase the queue count by 1
+		InterlockedExchangeAdd(&devContext->QueueCount, 1);
 		// the request keeps pending, that's why we return
 		return;
+
+	case IOCTL_START_CAPTURE:
+		if (!callbacksInitialized) {
+			callbacksInitialized = TRUE;
+			status = WCP_InitInjectionHandles();
+			if (!NT_SUCCESS(status)) {
+				DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_InitInjectionHandles failed\n");
+				break;
+			}
+			status = WCP_RegisterCallouts(gWdmDevice);
+		}
+		captureRunning = TRUE;
+		break;
+	case IOCTL_STOP_CAPTURE:
+		captureRunning = FALSE;
+		break;
 	default:
 
 		//
@@ -1190,7 +1071,6 @@ WCP_DeviceAdd(
 	WDF_OBJECT_ATTRIBUTES			attributes;
 	WDF_IO_QUEUE_CONFIG				ioQueueConfig;
 	WDF_FILEOBJECT_CONFIG			fileConfig;
-	WDFQUEUE                        queue;
 	//WDFDEVICE						controlDevice;
 	PINVERTED_DEVICE_CONTEXT		devContext;
 	DECLARE_CONST_UNICODE_STRING(ntDeviceName, L"\\Device\\WinCap");
@@ -1234,7 +1114,7 @@ WCP_DeviceAdd(
 	}
 
 	devContext = InvertedGetContextFromDevice(controlDevice);
-	devContext->Sequence = 1;
+	devContext->QueueCount = 0;
 
 	status = WdfDeviceCreateSymbolicLink(controlDevice, &symbolicLinkName);
 	if (!NT_SUCCESS(status)) {
@@ -1274,9 +1154,8 @@ WCP_DeviceAdd(
 
 	//retrieve the wdm device for the Callout-Functions
 	gWdmDevice = WdfDeviceWdmGetDeviceObject(controlDevice);
-	//pWdfDevice = controlDevice;
 
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Successfully ADDED WinCap DRIVER v0.01\n");
+	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "added WinCap driver\n");
 	return STATUS_SUCCESS;
 
 Exit:
@@ -1294,11 +1173,8 @@ DriverEntry(
 	NTSTATUS						status;
 	WDF_DRIVER_CONFIG				config;
 	WDFDRIVER						hDriver;
-	WDFDEVICE						device;
 	PWDFDEVICE_INIT					pInit = NULL;
 	WDF_OBJECT_ATTRIBUTES			attributes;
-
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Joined Driver Entry\n");
 
 	// Request NX Non-Paged Pool when available
 	ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
@@ -1337,13 +1213,6 @@ DriverEntry(
 		goto Exit;
 	}
 
-	status = WCP_InitInjectionHandles();
-	if (!NT_SUCCESS(status)) {
-		goto Exit;
-	}
-
-
-	status = WCP_RegisterCallouts(gWdmDevice);
 
 Exit:
 

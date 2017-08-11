@@ -1,2 +1,2 @@
 @ECHO OFF
-cl.exe /EHsc /MT %1 /link Setupapi.lib
+cl.exe /EHsc /MT %1 %2 /link Setupapi.lib

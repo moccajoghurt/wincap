@@ -901,16 +901,16 @@ NTSTATUS WCP_InitInjectionHandles() {
 	status = FwpsInjectionHandleCreate(AF_INET,
 		FWPS_INJECTION_TYPE_NETWORK,
 		&g_InjectionHandle_IPv4);
-
 	if (status != STATUS_SUCCESS) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpsInjectionHandleCreate failed with status: 0x%0x\n", status);
 		return status;
 	}
 
 	status = FwpsInjectionHandleCreate(AF_INET6,
 		FWPS_INJECTION_TYPE_NETWORK,
 		&g_InjectionHandle_IPv6);
-
 	if (status != STATUS_SUCCESS){
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpsInjectionHandleCreate failed with status: 0x%0x\n", status);
 		return status;
 	}
 

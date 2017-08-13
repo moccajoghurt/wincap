@@ -9,6 +9,7 @@
 
 #define IOCTL_INVERT_NOTIFICATION_BUF_NUM 10
 #define PACKET_BYTE_BUFFER_SIZE 2000
+#define MAC_HEADER_BYTE_NUM 14
 
 //------------------- Global 
 typedef struct _NETWORK_PACKET {
@@ -23,6 +24,7 @@ BOOL startCapture(VOID (*callbackFunc)(NETWORK_PACKET));
 VOID stopCapture(void);
 VOID endWincap(void);
 VOID printNetworkPacket(PNETWORK_PACKET);
+VOID printMACaddress(PNETWORK_PACKET);
 
 //------------------- Internal
 static HANDLE hDevice = NULL;

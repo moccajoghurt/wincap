@@ -40,6 +40,17 @@ VOID printNetworkPacket(PNETWORK_PACKET p) {
 	printf("Bytes read : %d\n", p->dataSize);
 }
 
+VOID printMACaddress(PNETWORK_PACKET p) {
+	for (int i = 0; i < MAC_HEADER_BYTE_NUM; i++) {
+		if (i >= p->dataSize) {break;}
+		
+		printf("%x", *(p->dataBytes + i * sizeof(char)));
+		
+		if (i > 0 && (i+1) % 2 == 0 && i < MAC_HEADER_BYTE_NUM - 1) {printf("-");}
+	}
+	printf("\n");
+}
+
 // ------------------------------- INTERNAL
 
 BOOL initDriver(void) {

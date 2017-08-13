@@ -221,9 +221,22 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOO
 	NTSTATUS			status = STATUS_UNSUCCESSFUL;
 	WDFREQUEST			wdfIoQueueRequest;
 	ULONG				bytesCopied = 0, totalLength;
+	//PVOID				pContiguousData = NULL;
+	//NET_BUFFER*			pNetBuffer = 0;
 	PINVERTED_DEVICE_CONTEXT devContext;
 
 	UNREFERENCED_PARAMETER(bSelfSent);
+
+	/*
+	pNetBuffer = NET_BUFFER_LIST_FIRST_NB(pClonedNetBufferList);
+	while (pNetBuffer) {
+		pContiguousData = NdisGetDataBuffer(pNetBuffer,
+			bytesRetreatedEthernet,
+			pPacketData,
+			1,
+			0);
+		if (!pContiguousData)
+	*/
 
 	devContext = InvertedGetContextFromDevice(controlDevice);
 
@@ -274,10 +287,10 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOO
 		NdisGetNextMdl(pMdl, &pMdl);
 	}
 
-	// unused but might be useful in the future. usually gets sent via WdfRequestCompleteWithInformation
+
 	bytesCopied = totalLength - BytesRemaining;
 
-	//sub queue count
+	//sub queue count. the queue count is currently not used
 	InterlockedExchangeAdd(&devContext->QueueCount, -1);
 	//WdfRequestCompleteWithInformation(wdfIoQueueRequest, STATUS_SUCCESS, devContext->QueueCount);
 	WdfRequestCompleteWithInformation(wdfIoQueueRequest, STATUS_SUCCESS, bytesCopied);
@@ -488,7 +501,7 @@ WCP_NetworkClassify(
 		goto Exit_Packet_Cloned;
 	}
 
-	pNetBuffer = NET_BUFFER_LIST_FIRST_NB(pClonedNetBufferList);
+	//pNetBuffer = NET_BUFFER_LIST_FIRST_NB(pClonedNetBufferList);
 
 	if (captureRunning) {
 		//send data to usermode

@@ -48,11 +48,12 @@ typedef struct PACKET_INFO {
 	ADDRESS_FAMILY   AddressFamily;  // IPv4 or IPv6
 	UINT32           ConnectionId;   // 32-bit connection associated with packet
 	BOOL             HaveIpHeader;   // True if outbound packet has an IP header
-	NET_BUFFER_LIST *NetBufferList;  // Holds packet data
+	//NET_BUFFER_LIST *NetBufferList;  // Holds packet data
 	UINT16           Port;           // Local port associated with packet
 	UINT8            Protocol;       // IP protocol for this packet
 	IP_ADDRESS       SrcIp;          // Source IP address for outbound packets
 	IP_ADDRESS       DstIp;          // Destination IP address for outbound packets
+	BOOL			 Inbound;		 // True if packet is inbound
 }PACKET_INFO;
 
 void WCP_InboundCallout(
@@ -113,8 +114,8 @@ WCP_FreeInjectionHandles();
 
 NTSTATUS
 WCP_ShareClonedNetBufferList(
-	PNET_BUFFER_LIST clonedNetBufferList,
-	BOOLEAN bSelfSent
+	PACKET_INFO* packetInfo,
+	NET_BUFFER_LIST* pNetBufferList
 );
 
 //****************** Inverted Call Method related

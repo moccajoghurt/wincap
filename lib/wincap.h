@@ -7,14 +7,14 @@
 #define IOCTL_START_CAPTURE CTL_CODE(SIOCTL_TYPE, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_STOP_CAPTURE CTL_CODE(SIOCTL_TYPE, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-#define IOCTL_INVERT_NOTIFICATION_BUF_NUM 10
+#define IOCTL_INVERT_NOTIFICATION_BUF_NUM 100
 #define PACKET_BYTE_BUFFER_SIZE 2000
 #define MAC_HEADER_BYTE_NUM 14
 
 //------------------- Global 
 typedef struct _NETWORK_PACKET {
 	//do not mess with this data space. it's shared with the kernel. the kernel takes care of it.
-	char* dataBytes;
+	void* dataBytes;
 	DWORD dataSize;
 	
 } NETWORK_PACKET, *PNETWORK_PACKET;
@@ -23,8 +23,8 @@ typedef struct _NETWORK_PACKET {
 BOOL startCapture(VOID (*callbackFunc)(NETWORK_PACKET));
 VOID stopCapture(void);
 VOID endWincap(void);
-VOID printNetworkPacket(PNETWORK_PACKET);
-VOID printMACaddress(PNETWORK_PACKET);
+//VOID debugPrintRawBytes(PNETWORK_PACKET);
+VOID debugGetTestNums(PNETWORK_PACKET);
 
 //------------------- Internal
 static HANDLE hDevice = NULL;

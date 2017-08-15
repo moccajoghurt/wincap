@@ -39,6 +39,7 @@ VOID WCP_NetworkInjectionComplete(
 	UNREFERENCED_PARAMETER(dispatchLevel);
 	UNREFERENCED_PARAMETER(pContext);
 
+	// unused because we don't clone netbufferlists
 
 	if (pNetBufferList->Status != STATUS_SUCCESS) {
 	}
@@ -49,7 +50,7 @@ VOID WCP_NetworkInjectionComplete(
 	return;
 }
 
-NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOOLEAN bSelfSent) {
+NTSTATUS WCP_ShareClonedNetBufferList(PACKET_INFO* packetInfo, NET_BUFFER_LIST* pNetBufferList) {
 
 	/*
 	* Sends a network-package to an open IOCTL-request.
@@ -68,14 +69,11 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOO
 	ULONG				bytesCopied = 0, totalLength;
 	PINVERTED_DEVICE_CONTEXT devContext;
 
-	UNREFERENCED_PARAMETER(bSelfSent);
-
 	devContext = InvertedGetContextFromDevice(controlDevice);
 
 	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &wdfIoQueueRequest);
 	if (!NT_SUCCESS(status)) {
-		// this happens everytime we don't have enough IOCTLs. Printing this slows windows down too much.
-		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed\n");
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed (dropping package, need more IOCTLs)\n");
 		return status;
 	}
 	
@@ -94,12 +92,42 @@ NTSTATUS WCP_ShareClonedNetBufferList(PNET_BUFFER_LIST pClonedNetBufferList, BOO
 	}
 
 
-	pRcvNetBufList = pClonedNetBufferList;
 	totalLength = BytesRemaining = MmGetMdlByteCount(pMdl);
+
+	// ----- insert packet info here
+
+	// We could use flags here but it would only save us 2 bytes. 
+	// If we add more bools, we can reimplement it with flags
+
+	// @TODO set the values from PACKET_INFO into these vars
+	UCHAR	isInbound = 1;
+	UCHAR	isSourceIpv6 = 1;
+	//UINT8	sourceIpVal[16] = 1338;
+	UCHAR	isTargetIpv6 = 1;
+	//UINT8	targetIpVal[16] = 1338;
+	UINT16	port = 0;
+	UINT8   protocol;
+	UINT	processId;
+
+	int val = 1337;
+	// test with 3x int vals
+	NdisMoveMemory(pDst, &val, 4);
+	BytesRemaining -= 4;
+	pDst += 4;
+
+	NdisMoveMemory(pDst, &val, 4);
+	BytesRemaining -= 4;
+	pDst += 4;
+
+	NdisMoveMemory(pDst, &val, 4);
+	BytesRemaining -= 4;
+	pDst += 4;
+
+	// ----
+
+	// ---- fill the rest of the data buffer with the packet data
+	pRcvNetBufList = pNetBufferList;
 	pMdl = pRcvNetBufList->FirstNetBuffer->MdlChain;
-
-	//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "totalLength %ld\n", totalLength);
-
 	while (BytesRemaining && (pMdl != NULL)) {
 		pSrc = NULL;
 		NdisQueryMdl(pMdl, &pSrc, &BytesAvailable, NormalPagePriority | MdlMappingNoExecute);
@@ -147,15 +175,10 @@ void WCP_InboundCallout(
 	UNREFERENCED_PARAMETER(filter);
 	UNREFERENCED_PARAMETER(flowContext);
 
-	//------- temp
-	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
-		FWPS_METADATA_FIELD_PROCESS_ID)) {
-		const UINT64 processId64 = inMetaValues->processId;
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "inbound packet, process id: %ld\n", processId64);
+	if (!captureRunning) {
+		return;
 	}
-	//-----
-
-	/*
+	
 
 	// Permit the packet to continue
 	if (classifyOut && (classifyOut->rights == FWPS_RIGHT_ACTION_WRITE) &&
@@ -208,19 +231,20 @@ void WCP_InboundCallout(
 			}
 		}
 
-		packetInfo.NetBufferList = netBufferList;
+		//packetInfo.NetBufferList = netBufferList;
+		packetInfo.Inbound = TRUE;
+
 		//CapturePacketData(&packetInfo, Inbound);
-		// call sharenetbufferlist here
+		WCP_ShareClonedNetBufferList(&packetInfo, netBufferList);
 
 		// Undo the retreat
 		if (headerSize) {
-			NdisAdvanceNetBufferDataStart(NET_BUFFER_LIST_FIRST_NB(
-				packetInfo.NetBufferList), headerSize, FALSE, NULL);
+			NdisAdvanceNetBufferDataStart(NET_BUFFER_LIST_FIRST_NB(netBufferList), headerSize, FALSE, NULL);
 		}
 		netBufferList = NET_BUFFER_LIST_NEXT_NBL(netBufferList);
 	}
-	*/
-
+	
+	// free packet info
 	// call: WCP_NetworkInjectionComplete
 }
 
@@ -234,10 +258,8 @@ void WCP_OutboundCallout(
 	_Inout_ FWPS_CLASSIFY_OUT* classifyOut
 ) {
 
-	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
-		FWPS_METADATA_FIELD_PROCESS_ID)) {
-		const UINT64 processId64 = inMetaValues->processId;
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "outbound packet, process id: %ld\n", processId64);
+	if (!captureRunning) {
+		return;
 	}
 
 	// call: WCP_NetworkInjectionComplete
@@ -364,24 +386,26 @@ NTSTATUS WCP_RegisterCallout(
 
 	NTSTATUS status = STATUS_SUCCESS;
 
-	FWPS_CALLOUT callout = { 0 };
+	FWPS_CALLOUT sCallout = { 0 };
+	FWPM_CALLOUT mCallout = { 0 };
+
+	FWPM_DISPLAY_DATA displayData = { 0 };
 
 	BOOLEAN calloutRegistered = FALSE;
 
-	callout.calloutKey = *calloutKey;
-	if (layerKey == &FWPM_LAYER_INBOUND_IPPACKET_V4 || 
+	sCallout.calloutKey = *calloutKey;
+	if (layerKey == &FWPM_LAYER_INBOUND_IPPACKET_V4 ||
 		layerKey == &FWPM_LAYER_INBOUND_IPPACKET_V6) {
-		callout.classifyFn = WCP_InboundCallout;
+		sCallout.classifyFn = WCP_InboundCallout;
 	}
 	else {
-		callout.classifyFn = WCP_OutboundCallout;
+		sCallout.classifyFn = WCP_OutboundCallout;
 	}
-
-	callout.notifyFn = WCP_NetworkNotify;
+	sCallout.notifyFn = WCP_NetworkNotify;
 
 	status = FwpsCalloutRegister(
 		deviceObject,
-		&callout,
+		&sCallout,
 		calloutId
 	);
 	if (!NT_SUCCESS(status)) {
@@ -389,6 +413,24 @@ NTSTATUS WCP_RegisterCallout(
 		goto Exit;
 	}
 	calloutRegistered = TRUE;
+
+	displayData.name = L"WinCap Network Callout";
+	displayData.description = L"WinCap inbound/outbound network traffic";
+
+	mCallout.calloutKey = *calloutKey;
+	mCallout.displayData = displayData;
+	mCallout.applicableLayer = *layerKey;
+
+	status = FwpmCalloutAdd(
+		gWdmDevice,
+		&mCallout,
+		NULL,
+		NULL
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpmCalloutAdd failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
 
 	status = WCP_AddFilter(layerKey, calloutKey);
 	if (!NT_SUCCESS(status)) {
@@ -421,9 +463,9 @@ NTSTATUS WCP_RegisterCallouts(
 
 	-- */
 	NTSTATUS status = STATUS_SUCCESS;
-	//FWPM_SUBLAYER NPFSubLayer;
+	FWPM_SUBLAYER NPFSubLayer;
 
-	//BOOLEAN engineOpened = FALSE;
+	BOOLEAN engineOpened = FALSE;
 	BOOLEAN inTransaction = FALSE;
 
 	FWPM_SESSION session = { 0 };
@@ -441,7 +483,7 @@ NTSTATUS WCP_RegisterCallouts(
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpmEngineOpen failed\n");
 		goto Exit;
 	}
-	//engineOpened = TRUE;
+	engineOpened = TRUE;
 
 	status = FwpmTransactionBegin(gWdmDevice, 0);
 	if (!NT_SUCCESS(status)) {
@@ -450,24 +492,20 @@ NTSTATUS WCP_RegisterCallouts(
 	}
 	inTransaction = TRUE;
 
-	/*
+	
 	RtlZeroMemory(&NPFSubLayer, sizeof(FWPM_SUBLAYER));
-
 	NPFSubLayer.subLayerKey = WCP_SUBLAYER;
 	NPFSubLayer.displayData.name = L"WinCap Sub-Layer";
 	NPFSubLayer.displayData.description = L"Sub-Layer for use by WinCap callouts";
 	NPFSubLayer.flags = 0;
-	NPFSubLayer.weight = 0; // must be less than the weight of 
-							// FWPM_SUBLAYER_UNIVERSAL to be
-							// compatible with Vista's IpSec
-							// implementation.
+	NPFSubLayer.weight = 0; 
 
 	status = FwpmSubLayerAdd(gWdmDevice, &NPFSubLayer, NULL);
 	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpmSubLayerAdd failed\n");
 		goto Exit;
 	}
-	*/
+	
 
 	status = WCP_RegisterCallout(
 		&FWPM_LAYER_OUTBOUND_IPPACKET_V4,
@@ -527,12 +565,10 @@ Exit:
 			FwpmTransactionAbort(gWdmDevice);
 			_Analysis_assume_lock_not_held_(gWdmDevice); // Potential leak if "FwpmTransactionAbort" fails
 		}
-		/*
 		if (engineOpened) {
 			FwpmEngineClose(gWdmDevice);
 			gWdmDevice = INVALID_HANDLE_VALUE;
 		}
-		*/
 	}
 
 

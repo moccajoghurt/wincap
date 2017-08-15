@@ -3,7 +3,7 @@
 
 // will be called whenever a network package is sent or received
 void myCallback(NETWORK_PACKET p) {
-	printMACaddress(&p);
+	debugGetTestNums(&p);
 }
 
 int main(int argc, char* argv[]) {

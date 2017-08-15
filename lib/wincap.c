@@ -27,7 +27,8 @@ VOID endWincap() {
 	}
 }
 
-VOID printNetworkPacket(PNETWORK_PACKET p) {
+/*
+VOID debugPrintRawBytes(PNETWORK_PACKET p) {
 	
 	for (int i = 0; i < p->dataSize; i++) {
 		if (*(p->dataBytes + i * sizeof(char)) == 0) {
@@ -39,16 +40,19 @@ VOID printNetworkPacket(PNETWORK_PACKET p) {
 	printf("\n");
 	printf("Bytes read : %d\n", p->dataSize);
 }
+*/
 
-VOID printMACaddress(PNETWORK_PACKET p) {
-	for (int i = 0; i < MAC_HEADER_BYTE_NUM; i++) {
-		if (i >= p->dataSize) {break;}
-		
-		printf("%x", *(p->dataBytes + i * sizeof(char)));
-		
-		if (i > 0 && (i+1) % 2 == 0 && i < MAC_HEADER_BYTE_NUM - 1) {printf("-");}
-	}
-	printf("\n");
+VOID debugGetTestNums(PNETWORK_PACKET p) {
+	int vals[3];
+	int *ptr = p->dataBytes;
+	vals[0] = *ptr;
+	vals[1] = *(ptr + 1);
+	vals[2] = *(ptr + 2);
+	printf("val 1: %d\n", vals[0]);
+	printf("val 2: %d\n", vals[1]);
+	printf("val 3: %d\n", vals[2]);
+	//vals[0] = *(p->dataBytes);
+	//vals[1] = (int)(p->(dataBytes + sizeof(int)));
 }
 
 // ------------------------------- INTERNAL
@@ -71,7 +75,7 @@ VOID createIoctlBuf(VOID (*callbackFunc)(NETWORK_PACKET)) {
 VOID sendIoctlNotification(VOID (*callbackFunc)(NETWORK_PACKET)) {
 	DWORD dwBytesRead = 0;
 	size_t byteCount = PACKET_BYTE_BUFFER_SIZE;
-	char* packetBuffer = calloc(byteCount, sizeof(char));
+	void* packetBuffer = calloc(byteCount, sizeof(char));
 	DeviceIoControl(hDevice, IOCTL_INVERT_NOTIFICATION, NULL, 0, packetBuffer, byteCount, &dwBytesRead, NULL);
 	//we received a package
 	NETWORK_PACKET p;

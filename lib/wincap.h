@@ -10,12 +10,23 @@
 #define IOCTL_INVERT_NOTIFICATION_BUF_NUM 100
 #define PACKET_BYTE_BUFFER_SIZE 2000
 #define MAC_HEADER_BYTE_NUM 14
+#define PACKET_INFO_SIZE 41
 
 //------------------- Global 
 typedef struct _NETWORK_PACKET {
-	//do not mess with this data space. it's shared with the kernel. the kernel takes care of it.
-	void* dataBytes;
+	// ---- packet info
+	BOOL 	isInbound;
+	BOOL 	isIpv4;
+	UINT32	sourceIpv4;     // IPv4
+	UINT32	targetIpv4;     // IPv4
+	UINT8	sourceIpv6[16];  // IPv6
+	UINT8	targetIpv6[16];  // IPv6
+	UINT16	port;
+	UINT8	protocol;
+	UINT32	processId;
 	DWORD dataSize;
+	// ---- packet data
+	void* dataBytes;
 	
 } NETWORK_PACKET, *PNETWORK_PACKET;
 
@@ -23,8 +34,7 @@ typedef struct _NETWORK_PACKET {
 BOOL startCapture(VOID (*callbackFunc)(NETWORK_PACKET));
 VOID stopCapture(void);
 VOID endWincap(void);
-//VOID debugPrintRawBytes(PNETWORK_PACKET);
-VOID debugGetTestNums(PNETWORK_PACKET);
+VOID printPacketInfo(PNETWORK_PACKET);
 
 //------------------- Internal
 static HANDLE hDevice = NULL;

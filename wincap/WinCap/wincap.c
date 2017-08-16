@@ -50,7 +50,7 @@ VOID WCP_NetworkInjectionComplete(
 	return;
 }
 
-NTSTATUS WCP_ShareClonedNetBufferList(PACKET_INFO* packetInfo, NET_BUFFER_LIST* pNetBufferList) {
+NTSTATUS WCP_ShareClonedNetBufferList(PACKET_INFO* packetInfo) {
 
 	/*
 	* Sends a network-package to an open IOCTL-request.
@@ -73,7 +73,7 @@ NTSTATUS WCP_ShareClonedNetBufferList(PACKET_INFO* packetInfo, NET_BUFFER_LIST* 
 
 	status = WdfIoQueueRetrieveNextRequest(devContext->NotificationQueue, &wdfIoQueueRequest);
 	if (!NT_SUCCESS(status)) {
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed (dropping package, need more IOCTLs)\n");
+		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WdfIoQueueRetrieveNextRequest failed (dropping package, need more IOCTLs)\n");
 		return status;
 	}
 	
@@ -94,39 +94,68 @@ NTSTATUS WCP_ShareClonedNetBufferList(PACKET_INFO* packetInfo, NET_BUFFER_LIST* 
 
 	totalLength = BytesRemaining = MmGetMdlByteCount(pMdl);
 
-	// ----- insert packet info here
+	// ----------- write packet info
 
-	// We could use flags here but it would only save us 2 bytes. 
-	// If we add more bools, we can reimplement it with flags
+	if (BytesRemaining < 41) {
+		// buffer is too small for packet info
+		goto Exit;
+	}
 
-	// @TODO set the values from PACKET_INFO into these vars
-	UCHAR	isInbound = 1;
-	UCHAR	isSourceIpv6 = 1;
-	//UINT8	sourceIpVal[16] = 1338;
-	UCHAR	isTargetIpv6 = 1;
-	//UINT8	targetIpVal[16] = 1338;
-	UINT16	port = 0;
-	UINT8   protocol;
-	UINT	processId;
+	// is inbound?
+	NdisMoveMemory(pDst, &packetInfo->Inbound, 1);
+	BytesRemaining -= 1;
+	pDst += 1;
 
-	int val = 1337;
-	// test with 3x int vals
-	NdisMoveMemory(pDst, &val, 4);
+	// is ipv4?
+	UCHAR isIpv4 = packetInfo->AddressFamily == AF_INET ? 1 : 0;
+	NdisMoveMemory(pDst, &isIpv4, 1);
+	BytesRemaining -= 1;
+	pDst += 1;
+
+	// write src & target ip
+	NdisZeroMemory(pDst, 16 * 2); // zero memory for the length of 2x ipv6 addresses
+	if (isIpv4) {
+		// source IP
+		NdisMoveMemory(pDst, &packetInfo->SrcIp.AsUInt32, 4);
+		BytesRemaining -= 16;
+		pDst += 16;
+
+		// target IP
+		NdisMoveMemory(pDst, &packetInfo->DstIp.AsUInt32, 4);
+		BytesRemaining -= 16;
+		pDst += 16;
+	}
+	else {
+		// source IP
+		NdisMoveMemory(pDst, packetInfo->SrcIp.AsUInt8, 16);
+		BytesRemaining -= 16;
+		pDst += 16;
+
+		// target IP
+		NdisMoveMemory(pDst, packetInfo->DstIp.AsUInt8, 16);
+		BytesRemaining -= 16;
+		pDst += 16;
+	}
+
+	// write port
+	NdisMoveMemory(pDst, &packetInfo->Port, 2);
+	BytesRemaining -= 2;
+	pDst += 2;
+
+	// write protocol
+	NdisMoveMemory(pDst, &packetInfo->Protocol, 1);
+	BytesRemaining -= 1;
+	pDst += 1;
+
+	// write process ID (not implemented yet)
+	UINT32 buf = 0;
+	NdisMoveMemory(pDst, &buf, 4);
 	BytesRemaining -= 4;
 	pDst += 4;
 
-	NdisMoveMemory(pDst, &val, 4);
-	BytesRemaining -= 4;
-	pDst += 4;
+	// ----------- fill the remaining buffer with packet data
 
-	NdisMoveMemory(pDst, &val, 4);
-	BytesRemaining -= 4;
-	pDst += 4;
-
-	// ----
-
-	// ---- fill the rest of the data buffer with the packet data
-	pRcvNetBufList = pNetBufferList;
+	pRcvNetBufList = packetInfo->NetBufferList;
 	pMdl = pRcvNetBufList->FirstNetBuffer->MdlChain;
 	while (BytesRemaining && (pMdl != NULL)) {
 		pSrc = NULL;
@@ -138,7 +167,6 @@ NTSTATUS WCP_ShareClonedNetBufferList(PACKET_INFO* packetInfo, NET_BUFFER_LIST* 
 
 		if (BytesAvailable) {
 			ULONG BytesToCopy = (BytesAvailable < BytesRemaining) ? BytesAvailable : BytesRemaining;
-			//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "data: %s\n", pSrc);
 			NdisMoveMemory(pDst, pSrc, BytesToCopy);
 			BytesRemaining -= BytesToCopy;
 			pDst += BytesToCopy;
@@ -147,7 +175,7 @@ NTSTATUS WCP_ShareClonedNetBufferList(PACKET_INFO* packetInfo, NET_BUFFER_LIST* 
 		NdisGetNextMdl(pMdl, &pMdl);
 	}
 
-
+Exit:
 	bytesCopied = totalLength - BytesRemaining;
 
 	//sub queue count. the queue count is currently not used
@@ -200,11 +228,15 @@ void WCP_InboundCallout(
 		packetInfo.AddressFamily = AF_INET;
 		packetInfo.Port = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_LOCAL_PORT].value.uint16;
 		packetInfo.Protocol = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_PROTOCOL].value.uint8;
+		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv4 port: %d\n", packetInfo.Port);
+		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv4 protocol: %d\n", packetInfo.Protocol);
 	}
 	else {
 		packetInfo.AddressFamily = AF_INET6;
 		packetInfo.Port = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V6_IP_LOCAL_PORT].value.uint16;
 		packetInfo.Protocol = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V6_IP_PROTOCOL].value.uint8;
+		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv6 port: %d\n", packetInfo.Port);
+		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv6 protocol: %d\n", packetInfo.Protocol);
 	}
 
 	// Get IP and transport header sizes
@@ -231,11 +263,11 @@ void WCP_InboundCallout(
 			}
 		}
 
-		//packetInfo.NetBufferList = netBufferList;
+		packetInfo.NetBufferList = netBufferList;
 		packetInfo.Inbound = TRUE;
 
 		//CapturePacketData(&packetInfo, Inbound);
-		WCP_ShareClonedNetBufferList(&packetInfo, netBufferList);
+		WCP_ShareClonedNetBufferList(&packetInfo);
 
 		// Undo the retreat
 		if (headerSize) {
@@ -243,9 +275,7 @@ void WCP_InboundCallout(
 		}
 		netBufferList = NET_BUFFER_LIST_NEXT_NBL(netBufferList);
 	}
-	
-	// free packet info
-	// call: WCP_NetworkInjectionComplete
+
 }
 
 void WCP_OutboundCallout(
@@ -262,7 +292,7 @@ void WCP_OutboundCallout(
 		return;
 	}
 
-	// call: WCP_NetworkInjectionComplete
+
 }
 
 

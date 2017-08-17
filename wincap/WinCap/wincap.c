@@ -50,7 +50,7 @@ VOID WCP_NetworkInjectionComplete(
 	return;
 }
 
-NTSTATUS WCP_ShareClonedNetBufferList(PACKET_INFO* packetInfo) {
+NTSTATUS WCP_ShareNetBufferList(PACKET_INFO* packetInfo) {
 
 	/*
 	* Sends a network-package to an open IOCTL-request.
@@ -195,6 +195,11 @@ void WCP_InboundCallout(
 	__in UINT64                               flowContext,
 	__out FWPS_CLASSIFY_OUT                  *classifyOut)
 {
+
+	if (!captureRunning) {
+		return;
+	}
+
 	UINT32           headerSize = 0;
 	NET_BUFFER_LIST *netBufferList = (NET_BUFFER_LIST*)layerData;
 	PACKET_INFO      packetInfo = { 0 };
@@ -202,10 +207,6 @@ void WCP_InboundCallout(
 	UNREFERENCED_PARAMETER(classifyContext);
 	UNREFERENCED_PARAMETER(filter);
 	UNREFERENCED_PARAMETER(flowContext);
-
-	if (!captureRunning) {
-		return;
-	}
 	
 
 	// Permit the packet to continue
@@ -215,14 +216,14 @@ void WCP_InboundCallout(
 	}
 
 	if (!netBufferList) {
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "received empty layerData\n");
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "received empty inbound layerData\n");
 		return;
 	}
 
 	// Get the connection ID, address family, port, and protocol
 	packetInfo.ConnectionId = FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
 		FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE) ?
-		inMetaValues->transportEndpointHandle & UINT_MAX : UINT_MAX;
+		inMetaValues->transportEndpointHandle & UINT32_MAX : UINT32_MAX;
 
 	if (inFixedValues->layerId == FWPS_LAYER_INBOUND_TRANSPORT_V4) {
 		packetInfo.AddressFamily = AF_INET;
@@ -240,12 +241,10 @@ void WCP_InboundCallout(
 	}
 
 	// Get IP and transport header sizes
-	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
-		FWPS_METADATA_FIELD_TRANSPORT_HEADER_SIZE)) {
+	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues, FWPS_METADATA_FIELD_TRANSPORT_HEADER_SIZE)) {
 		headerSize += inMetaValues->transportHeaderSize;
 	}
-	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
-		FWPS_METADATA_FIELD_IP_HEADER_SIZE)) {
+	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues, FWPS_METADATA_FIELD_IP_HEADER_SIZE)) {
 		headerSize += inMetaValues->ipHeaderSize;
 	}
 
@@ -267,7 +266,7 @@ void WCP_InboundCallout(
 		packetInfo.Inbound = TRUE;
 
 		//CapturePacketData(&packetInfo, Inbound);
-		WCP_ShareClonedNetBufferList(&packetInfo);
+		WCP_ShareNetBufferList(&packetInfo);
 
 		// Undo the retreat
 		if (headerSize) {
@@ -278,20 +277,83 @@ void WCP_InboundCallout(
 
 }
 
+
+
 void WCP_OutboundCallout(
-	_In_ const FWPS_INCOMING_VALUES* inFixedValues,
-	_In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
-	_Inout_opt_ void* layerData,
-	_In_opt_ const void* classifyContext,
-	_In_ const FWPS_FILTER* filter,
-	_In_ UINT64 flowContext,
-	_Inout_ FWPS_CLASSIFY_OUT* classifyOut
+	__in const FWPS_INCOMING_VALUES          *inFixedValues,
+	__in const FWPS_INCOMING_METADATA_VALUES *inMetaValues,
+	__inout_opt void                         *layerData,
+	__in_opt const void                      *classifyContext,
+	__in const FWPS_FILTER                   *filter,
+	__in UINT64                               flowContext,
+	__out FWPS_CLASSIFY_OUT                  *classifyOut
 ) {
 
 	if (!captureRunning) {
 		return;
 	}
 
+	NET_BUFFER_LIST* netBufferList = (NET_BUFFER_LIST*)layerData;
+	PACKET_INFO      packetInfo = { 0 };
+
+	UNREFERENCED_PARAMETER(classifyContext);
+	UNREFERENCED_PARAMETER(filter);
+	UNREFERENCED_PARAMETER(flowContext);
+
+	// Permit the packet to continue
+	if (classifyOut && (classifyOut->rights == FWPS_RIGHT_ACTION_WRITE) &&
+		(classifyOut->actionType != FWP_ACTION_BLOCK)) {
+		classifyOut->actionType = FWP_ACTION_CONTINUE;
+	}
+
+
+	if (!netBufferList) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "received empty outbound layerData\n");
+		return;
+	}
+
+	// Get the connection ID, address family, port, and protocol
+	packetInfo.ConnectionId = FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
+		FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE) ?
+		inMetaValues->transportEndpointHandle & UINT32_MAX : UINT32_MAX;
+	if (inFixedValues->layerId == FWPS_LAYER_OUTBOUND_TRANSPORT_V4) {
+		packetInfo.AddressFamily = AF_INET;
+		packetInfo.Port = inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V4_IP_LOCAL_PORT].value.uint16;
+		packetInfo.Protocol = inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V4_IP_PROTOCOL].value.uint8;
+	}
+	else {
+		packetInfo.AddressFamily = AF_INET6;
+		packetInfo.Port = inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V6_IP_LOCAL_PORT].value.uint16;
+		packetInfo.Protocol = inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V6_IP_PROTOCOL].value.uint8;
+	}
+	
+	// Get the IP addresses (IPv6 address are already in network byte order)
+	if (packetInfo.AddressFamily == AF_INET) {
+		packetInfo.SrcIp.AsUInt32 = RtlUlongByteSwap(inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V4_IP_LOCAL_ADDRESS].value.uint32);
+		packetInfo.DstIp.AsUInt32 = RtlUlongByteSwap(inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V4_IP_REMOTE_ADDRESS].value.uint32);
+	}
+	else {
+
+		// FWPS_FIELD_OUTBOUND_TRANSPORT_V6_IP_LOCAL_ADDRESS returns the pointer value 0x01. only occurs when using IPPACKET instead of TRANSPORT
+		RtlCopyMemory(packetInfo.SrcIp.AsUInt8, inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V6_IP_LOCAL_ADDRESS].value.byteArray16->byteArray16, 16);
+		RtlCopyMemory(packetInfo.DstIp.AsUInt8, inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V6_IP_REMOTE_ADDRESS].value.byteArray16->byteArray16, 16);
+	}
+
+	
+	// Get the existing IP header size, if any
+	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
+		FWPS_METADATA_FIELD_IP_HEADER_SIZE)) {
+		packetInfo.HaveIpHeader = inMetaValues->ipHeaderSize ? TRUE : FALSE;
+	}
+
+	// Capture packet data for each net buffer in the list
+	while (netBufferList != NULL) {
+		packetInfo.NetBufferList = netBufferList;
+		packetInfo.Inbound = FALSE;
+		WCP_ShareNetBufferList(&packetInfo);
+		netBufferList = NET_BUFFER_LIST_NEXT_NBL(netBufferList);
+	}
+	
 
 }
 
@@ -424,8 +486,8 @@ NTSTATUS WCP_RegisterCallout(
 	BOOLEAN calloutRegistered = FALSE;
 
 	sCallout.calloutKey = *calloutKey;
-	if (layerKey == &FWPM_LAYER_INBOUND_IPPACKET_V4 ||
-		layerKey == &FWPM_LAYER_INBOUND_IPPACKET_V6) {
+	if (layerKey == &FWPM_LAYER_INBOUND_TRANSPORT_V4 ||
+		layerKey == &FWPM_LAYER_INBOUND_TRANSPORT_V6) {
 		sCallout.classifyFn = WCP_InboundCallout;
 	}
 	else {
@@ -536,9 +598,9 @@ NTSTATUS WCP_RegisterCallouts(
 		goto Exit;
 	}
 	
-
+	
 	status = WCP_RegisterCallout(
-		&FWPM_LAYER_OUTBOUND_IPPACKET_V4,
+		&FWPM_LAYER_OUTBOUND_TRANSPORT_V4,
 		&WCP_OUTBOUND_IPPACKET_CALLOUT_V4,
 		deviceObject,
 		&g_OutboundIPPacketV4
@@ -549,7 +611,7 @@ NTSTATUS WCP_RegisterCallouts(
 	}
 
 	status = WCP_RegisterCallout(
-		&FWPM_LAYER_INBOUND_IPPACKET_V4,
+		&FWPM_LAYER_INBOUND_TRANSPORT_V4,
 		&WCP_INBOUND_IPPACKET_CALLOUT_V4,
 		deviceObject,
 		&g_InboundIPPacketV4
@@ -560,7 +622,7 @@ NTSTATUS WCP_RegisterCallouts(
 	}
 
 	status = WCP_RegisterCallout(
-		&FWPM_LAYER_OUTBOUND_IPPACKET_V6,
+		&FWPM_LAYER_OUTBOUND_TRANSPORT_V6,
 		&WCP_OUTBOUND_IPPACKET_CALLOUT_V6,
 		deviceObject,
 		&g_OutboundIPPacketV6
@@ -571,7 +633,7 @@ NTSTATUS WCP_RegisterCallouts(
 	}
 
 	status = WCP_RegisterCallout(
-		&FWPM_LAYER_INBOUND_IPPACKET_V6,
+		&FWPM_LAYER_INBOUND_TRANSPORT_V6,
 		&WCP_INBOUND_IPPACKET_CALLOUT_V6,
 		deviceObject,
 		&g_InboundIPPacketV6

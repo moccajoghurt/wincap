@@ -36,15 +36,15 @@ DEFINE_GUID(WCP_INBOUND_IPPACKET_CALLOUT_V6, 0x21022f40, 0x9578, 0x4c39, 0x98, 0
 DEFINE_GUID(WCP_SUBLAYER, 0x2f32c254, 0xa054, 0x469b, 0xb9, 0x9b, 0x3e, 0x88, 0x10, 0x27, 0x5a, 0x71);
 
 
-#define UINT_MAX 0xffffffff
+#define UINT32_MAX 0xffffffff
 
-typedef union IP_ADDRESS {
+typedef union _IP_ADDRESS {
 	UINT8   AsUInt8[16];  // IPv6
 	UINT32  AsUInt32;     // IPv4
 }IP_ADDRESS;
 
 // Information needed to capture packet data
-typedef struct PACKET_INFO {
+typedef struct _PACKET_INFO {
 	ADDRESS_FAMILY   AddressFamily;  // IPv4 or IPv6
 	UINT32           ConnectionId;   // 32-bit connection associated with packet
 	BOOL             HaveIpHeader;   // True if outbound packet has an IP header
@@ -113,7 +113,7 @@ NTSTATUS
 WCP_FreeInjectionHandles();
 
 NTSTATUS
-WCP_ShareClonedNetBufferList(
+WCP_ShareNetBufferList(
 	PACKET_INFO* packetInfo
 );
 

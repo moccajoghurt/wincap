@@ -44,12 +44,13 @@ VOID debugPrintRawBytes(PNETWORK_PACKET p) {
 
 VOID printPacketInfo(PNETWORK_PACKET p) {
 	if (p->isInbound) {
+		
 		printf("inbound package\n");
 	}
 	else {
 		printf("outbound package\n");
 	}
-	if (p->isIpv4) {
+	if (p->isIpv4 && !p->isInbound) {
 		int block;
 		printf("Source IP: ");
 		printf("%d.", p->sourceIpv4 >> 24);
@@ -81,10 +82,10 @@ VOID printPacketInfo(PNETWORK_PACKET p) {
 		block >>= 24;
 		printf("%d\n", block);
 	}
-	else {
+	else if (!p->isIpv4 && !p->isInbound) {
 		printf("Source IP: ");
 		for (int i = 0; i < 16; i++) {
-			printf("%x", p->sourceIpv6[i]);
+			printf("%hhX", p->sourceIpv6[i]);
 			if ((i+1)%2 == 0 && i != 15) {
 				printf(".");
 			}
@@ -93,12 +94,16 @@ VOID printPacketInfo(PNETWORK_PACKET p) {
 		
 		printf("Target IP: ");
 		for (int i = 0; i < 16; i++) {
-			printf("%x", p->targetIpv6[i]);
+			printf("%hhX", p->targetIpv6[i]);
 			if ((i+1)%2 == 0 && i != 15) {
 				printf(".");
 			}
 		}
 		printf("\n");
+	}
+	else {
+		printf("Source IP: localhost\n");
+		printf("Target IP: localhost\n");
 	}
 	printf("port: %d\n", p->port);
 	printf("protocol: %d\n", p->protocol);

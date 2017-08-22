@@ -243,8 +243,8 @@ void WCP_InboundCallout(
 
 	// ---------- not enough tests, keep an eye on this
 	if (packetInfo.AddressFamily == AF_INET) {
-		packetInfo.DstIp.AsUInt32 = RtlUlongByteSwap(inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_LOCAL_ADDRESS].value.uint32);
-		packetInfo.SrcIp.AsUInt32 = RtlUlongByteSwap(inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_REMOTE_ADDRESS].value.uint32);
+		packetInfo.DstIp.AsUInt32 = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_LOCAL_ADDRESS].value.uint32;
+		packetInfo.SrcIp.AsUInt32 = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_REMOTE_ADDRESS].value.uint32;
 	}
 	else {
 
@@ -343,8 +343,8 @@ void WCP_OutboundCallout(
 	
 	// Get the IP addresses (IPv6 address are already in network byte order)
 	if (packetInfo.AddressFamily == AF_INET) {
-		packetInfo.SrcIp.AsUInt32 = RtlUlongByteSwap(inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V4_IP_LOCAL_ADDRESS].value.uint32);
-		packetInfo.DstIp.AsUInt32 = RtlUlongByteSwap(inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V4_IP_REMOTE_ADDRESS].value.uint32);
+		packetInfo.SrcIp.AsUInt32 = inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V4_IP_LOCAL_ADDRESS].value.uint32;
+		packetInfo.DstIp.AsUInt32 = inFixedValues->incomingValue[FWPS_FIELD_OUTBOUND_TRANSPORT_V4_IP_REMOTE_ADDRESS].value.uint32;
 	}
 	else {
 
@@ -615,7 +615,7 @@ NTSTATUS WCP_RegisterCallouts(
 	
 	status = WCP_RegisterCallout(
 		&FWPM_LAYER_OUTBOUND_TRANSPORT_V4,
-		&WCP_OUTBOUND_IPPACKET_CALLOUT_V4,
+		&WCP_OUTBOUND_TRANSPORT_CALLOUT_V4,
 		deviceObject,
 		&g_OutboundIPPacketV4
 	);
@@ -626,7 +626,7 @@ NTSTATUS WCP_RegisterCallouts(
 
 	status = WCP_RegisterCallout(
 		&FWPM_LAYER_INBOUND_TRANSPORT_V4,
-		&WCP_INBOUND_IPPACKET_CALLOUT_V4,
+		&WCP_INBOUND_TRANSPORT_CALLOUT_V4,
 		deviceObject,
 		&g_InboundIPPacketV4
 	);
@@ -637,7 +637,7 @@ NTSTATUS WCP_RegisterCallouts(
 
 	status = WCP_RegisterCallout(
 		&FWPM_LAYER_OUTBOUND_TRANSPORT_V6,
-		&WCP_OUTBOUND_IPPACKET_CALLOUT_V6,
+		&WCP_OUTBOUND_TRANSPORT_CALLOUT_V6,
 		deviceObject,
 		&g_OutboundIPPacketV6
 	);
@@ -648,7 +648,7 @@ NTSTATUS WCP_RegisterCallouts(
 
 	status = WCP_RegisterCallout(
 		&FWPM_LAYER_INBOUND_TRANSPORT_V6,
-		&WCP_INBOUND_IPPACKET_CALLOUT_V6,
+		&WCP_INBOUND_TRANSPORT_CALLOUT_V6,
 		deviceObject,
 		&g_InboundIPPacketV6
 	);

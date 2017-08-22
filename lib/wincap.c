@@ -55,8 +55,9 @@ VOID printPacketInfo(PNETWORK_PACKET p) {
 	if (p->isIpv4 /* && !p->isInbound*/) {
 		UINT32 block;
 		printf("Source IP: ");
+		printf("%u.", p->sourceIpv4 >> 24);
 		block = p->sourceIpv4;
-		block <<= 24;
+		block <<= 8;
 		block >>= 24;
 		printf("%u.", block);
 		block = p->sourceIpv4;
@@ -64,14 +65,14 @@ VOID printPacketInfo(PNETWORK_PACKET p) {
 		block >>= 24;
 		printf("%u.", block);
 		block = p->sourceIpv4;
-		block <<= 8;
+		block <<= 24;
 		block >>= 24;
-		printf("%u.", block);
-		printf("%u\n", p->sourceIpv4 >> 24);
+		printf("%u\n", block);
 		
 		printf("Target IP: ");
+		printf("%u.", p->targetIpv4 >> 24);
 		block = p->targetIpv4;
-		block <<= 24;
+		block <<= 8;
 		block >>= 24;
 		printf("%u.", block);
 		block = p->targetIpv4;
@@ -79,10 +80,9 @@ VOID printPacketInfo(PNETWORK_PACKET p) {
 		block >>= 24;
 		printf("%u.", block);
 		block = p->targetIpv4;
-		block <<= 8;
+		block <<= 24;
 		block >>= 24;
-		printf("%u.", block);
-		printf("%u\n", p->targetIpv4 >> 24);
+		printf("%u\n", block);
 	}
 	else if (!p->isIpv4/* && !p->isInbound*/) {
 		printf("Source IP: ");

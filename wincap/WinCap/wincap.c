@@ -22,13 +22,25 @@ WDFDEVICE controlDevice;
 BOOLEAN captureRunning = FALSE;
 BOOLEAN callbacksInitialized = FALSE;
 
-UINT32 g_OutboundIPPacketV4 = 0;
-UINT32 g_OutboundIPPacketV6 = 0;
-UINT32 g_InboundIPPacketV4 = 0;
-UINT32 g_InboundIPPacketV6 = 0;
-HANDLE g_InjectionHandle_IPv4 = INVALID_HANDLE_VALUE;
-HANDLE g_InjectionHandle_IPv6 = INVALID_HANDLE_VALUE;
+UINT32 g_OutboundTransportV4 = 0;
+UINT32 g_OutboundTransportV6 = 0;
+UINT32 g_InboundTransportV4 = 0;
+UINT32 g_InboundTransportV6 = 0;
+// ------ for process ID
+UINT32 g_AuthConnectV4 = 0;
+UINT32 g_AuthConnectV6 = 0;
+UINT32 g_RecvAcceptV4 = 0;
+UINT32 g_RecvAcceptV6 = 0;
+UINT32 g_ResourceAssignmentV4 = 0;
+UINT32 g_ResourceAssignmentV6 = 0;
+UINT32 g_EndpointClosureV4 = 0;
+UINT32 g_EndpointClosureV6 = 0;
+UINT32 g_ResourceReleaseV4 = 0;
+UINT32 g_ResourceReleaseV6 = 0;
+// ------
 
+KSPIN_LOCK gProcessIdListLock;
+PROCESS_LIST_VALUE processIdListHead;
 
 
 VOID WCP_NetworkInjectionComplete(
@@ -230,15 +242,11 @@ void WCP_InboundCallout(
 		packetInfo.AddressFamily = AF_INET;
 		packetInfo.Port = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_LOCAL_PORT].value.uint16;
 		packetInfo.Protocol = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_PROTOCOL].value.uint8;
-		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv4 port: %d\n", packetInfo.Port);
-		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv4 protocol: %d\n", packetInfo.Protocol);
 	}
 	else {
 		packetInfo.AddressFamily = AF_INET6;
 		packetInfo.Port = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V6_IP_LOCAL_PORT].value.uint16;
 		packetInfo.Protocol = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V6_IP_PROTOCOL].value.uint8;
-		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv6 port: %d\n", packetInfo.Port);
-		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv6 protocol: %d\n", packetInfo.Protocol);
 	}
 
 	// ---------- not enough tests, keep an eye on this
@@ -247,8 +255,6 @@ void WCP_InboundCallout(
 		packetInfo.SrcIp.AsUInt32 = inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_REMOTE_ADDRESS].value.uint32;
 	}
 	else {
-
-		// FWPS_FIELD_OUTBOUND_TRANSPORT_V6_IP_LOCAL_ADDRESS returns the pointer value 0x01. only occurs when using IPPACKET instead of TRANSPORT
 		RtlCopyMemory(packetInfo.DstIp.AsUInt8, inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V6_IP_LOCAL_ADDRESS].value.byteArray16->byteArray16, 16);
 		RtlCopyMemory(packetInfo.SrcIp.AsUInt8, inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V6_IP_REMOTE_ADDRESS].value.byteArray16->byteArray16, 16);
 	}
@@ -371,6 +377,125 @@ void WCP_OutboundCallout(
 
 }
 
+void WCP_ConnectionCallout(
+	__in const FWPS_INCOMING_VALUES          *inFixedValues,
+	__in const FWPS_INCOMING_METADATA_VALUES *inMetaValues,
+	__inout_opt void                         *layerData,
+	__in_opt const void                      *classifyContext,
+	__in const FWPS_FILTER                   *filter,
+	__in UINT64                               flowContext,
+	__out FWPS_CLASSIFY_OUT                  *classifyOut
+) {
+
+	UNREFERENCED_PARAMETER(classifyContext);
+	UNREFERENCED_PARAMETER(filter);
+	UNREFERENCED_PARAMETER(flowContext);
+	UNREFERENCED_PARAMETER(layerData);
+
+	BOOL   connectionOpened;
+	UINT32 connectionId = UINT32_MAX;
+	UINT32 processId = UINT32_MAX;
+
+	// Permit the packet to continue
+	if (classifyOut && (classifyOut->rights == FWPS_RIGHT_ACTION_WRITE) &&
+		(classifyOut->actionType != FWP_ACTION_BLOCK)) {
+		classifyOut->actionType = FWP_ACTION_CONTINUE; // FWP_ACTION_PERMIT;
+	}
+
+	switch (inFixedValues->layerId) {
+		case FWPS_LAYER_ALE_AUTH_CONNECT_V4:
+		case FWPS_LAYER_ALE_AUTH_CONNECT_V6:
+		case FWPS_LAYER_ALE_AUTH_RECV_ACCEPT_V4:
+		case FWPS_LAYER_ALE_AUTH_RECV_ACCEPT_V6:
+		case FWPS_LAYER_ALE_RESOURCE_ASSIGNMENT_V4:
+		case FWPS_LAYER_ALE_RESOURCE_ASSIGNMENT_V6:
+			connectionOpened = TRUE;
+			break;
+		case FWPS_LAYER_ALE_ENDPOINT_CLOSURE_V4:
+		case FWPS_LAYER_ALE_ENDPOINT_CLOSURE_V6:
+		case FWPS_LAYER_ALE_RESOURCE_RELEASE_V4:
+		case FWPS_LAYER_ALE_RESOURCE_RELEASE_V6:
+			connectionOpened = FALSE;
+			break;
+		default:
+			return;
+	}
+
+	// Get process ID
+	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
+		FWPS_METADATA_FIELD_PROCESS_ID)) {
+		const UINT64 processId64 = inMetaValues->processId;
+		processId = processId64 & UINT32_MAX;
+		if (processId64 > UINT32_MAX) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Process ID is too large\n");
+		}
+	}
+	else {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "No process ID on connection event\n");
+	}
+
+	// Get connection ID
+	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues,
+		FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE)) {
+		const UINT64 connectionId64 = inMetaValues->transportEndpointHandle;
+		connectionId = connectionId64 & UINT32_MAX;
+		if (connectionId64 > UINT32_MAX) {
+			DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "Connection ID is too large\n");
+		}
+	}
+	else {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "No Connection ID on connection event\n");
+	}
+
+	// add process ID to list
+	if (connectionOpened) {
+		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "opened: Connection ID: %u, Process ID: %u\n", connectionId, processId);
+	}
+	else {
+		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "closed: Connection ID: %u, Process ID: %u\n", connectionId, processId);
+	}
+
+
+	// iterate through list and see if the connection ID is inside already
+	/*
+	PPROCESS_LIST_VALUE e;
+	PSINGLE_LIST_ENTRY entry;
+	entry = &processIdListHead.SingleListEntry;
+	e = CONTAINING_RECORD(entry, PROCESS_LIST_VALUE, SingleListEntry);
+	*/
+
+	BOOL connectionIdFound = FALSE;
+	PSINGLE_LIST_ENTRY p;
+	p = processIdListHead.SingleListEntry.Next;
+	while (p != NULL) {
+
+		PPROCESS_LIST_VALUE val;
+		val = CONTAINING_RECORD(p, PROCESS_LIST_VALUE, SingleListEntry);
+
+		if (val->ConnectionId == connectionId) {
+			connectionIdFound = TRUE;
+			break;
+		}
+
+		p = p->Next;
+	}
+
+	if (connectionIdFound) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "found value\n");
+	}
+	else {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "did not find value\n");
+	}
+
+	/*
+	PROCESS_ID_ENTRY newEntry;
+	newEntry.ConnectionId = connectionId;
+	newEntry.ProcessId = processId;
+	ExInterlockedPushEntryList(&processIdListHead, &newEntry.SingleListEntry, &gProcessIdListLock);
+	*/
+
+}
+
 
 NTSTATUS
 WCP_NetworkNotify(
@@ -398,7 +523,7 @@ NTSTATUS WCP_AddFilter(
 	UINT conditionIndex;
 
 	filter.layerKey = *layerKey;
-	filter.displayData.name = L"Network WinCap Filter (Outbound)";
+	filter.displayData.name = L"Network WinCap Filter";
 	filter.displayData.description = L"WinCap inbound/outbound network traffic";
 
 	filter.action.calloutKey = *calloutKey;
@@ -504,8 +629,12 @@ NTSTATUS WCP_RegisterCallout(
 		layerKey == &FWPM_LAYER_INBOUND_TRANSPORT_V6) {
 		sCallout.classifyFn = WCP_InboundCallout;
 	}
-	else {
+	else if (layerKey == &FWPM_LAYER_OUTBOUND_TRANSPORT_V4 ||
+			 layerKey == &FWPM_LAYER_OUTBOUND_TRANSPORT_V6) {
 		sCallout.classifyFn = WCP_OutboundCallout;
+	}
+	else {
+		sCallout.classifyFn = WCP_ConnectionCallout;
 	}
 	sCallout.notifyFn = WCP_NetworkNotify;
 
@@ -617,7 +746,7 @@ NTSTATUS WCP_RegisterCallouts(
 		&FWPM_LAYER_OUTBOUND_TRANSPORT_V4,
 		&WCP_OUTBOUND_TRANSPORT_CALLOUT_V4,
 		deviceObject,
-		&g_OutboundIPPacketV4
+		&g_OutboundTransportV4
 	);
 	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_IPV4_1 failed with status: 0x%0x\n", status);
@@ -628,7 +757,7 @@ NTSTATUS WCP_RegisterCallouts(
 		&FWPM_LAYER_INBOUND_TRANSPORT_V4,
 		&WCP_INBOUND_TRANSPORT_CALLOUT_V4,
 		deviceObject,
-		&g_InboundIPPacketV4
+		&g_InboundTransportV4
 	);
 	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_IPV4_2 with status: 0x%0x\n", status);
@@ -639,7 +768,7 @@ NTSTATUS WCP_RegisterCallouts(
 		&FWPM_LAYER_OUTBOUND_TRANSPORT_V6,
 		&WCP_OUTBOUND_TRANSPORT_CALLOUT_V6,
 		deviceObject,
-		&g_OutboundIPPacketV6
+		&g_OutboundTransportV6
 	);
 	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_IPV6 with status: 0x%0x\n", status);
@@ -650,12 +779,125 @@ NTSTATUS WCP_RegisterCallouts(
 		&FWPM_LAYER_INBOUND_TRANSPORT_V6,
 		&WCP_INBOUND_TRANSPORT_CALLOUT_V6,
 		deviceObject,
-		&g_InboundIPPacketV6
+		&g_InboundTransportV6
 	);
 	if (!NT_SUCCESS(status)) {
 		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_IPV6 failed with status: 0x%0x\n", status);
 		goto Exit;
 	}
+
+	// ----------------- add connection callouts for process id
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_AUTH_CONNECT_V4,
+		&WCP_AUTH_CONNECT_CALLOUT_V4,
+		deviceObject,
+		&g_AuthConnectV4
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_AUTH_CONNECT_V4 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_AUTH_CONNECT_V6,
+		&WCP_AUTH_CONNECT_CALLOUT_V6,
+		deviceObject,
+		&g_AuthConnectV6
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_AUTH_CONNECT_V6 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
+		&WCP_RECV_ACCEPT_CALLOUT_V4,
+		deviceObject,
+		&g_RecvAcceptV4
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_RECV_ACCEPT_V4 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
+		&WCP_RECV_ACCEPT_CALLOUT_V6,
+		deviceObject,
+		&g_RecvAcceptV6
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_RECV_ACCEPT_V6 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_RESOURCE_ASSIGNMENT_V4,
+		&WCP_RESOURCE_ASSIGNMENT_CALLOUT_V4,
+		deviceObject,
+		&g_ResourceAssignmentV4
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_ASSIGNMENT_CALLOUT_V4 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_RESOURCE_ASSIGNMENT_V6,
+		&WCP_RESOURCE_ASSIGNMENT_CALLOUT_V6,
+		deviceObject,
+		&g_ResourceAssignmentV6
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_ASSIGNMENT_CALLOUT_V6 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_ENDPOINT_CLOSURE_V4,
+		&WCP_ENDPOINT_CLOSURE_CALLOUT_V4,
+		deviceObject,
+		&g_EndpointClosureV4
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_CLOSURE_CALLOUT_V4 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_ENDPOINT_CLOSURE_V6,
+		&WCP_ENDPOINT_CLOSURE_CALLOUT_V6,
+		deviceObject,
+		&g_EndpointClosureV6
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_CLOSURE_CALLOUT_V6 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_RESOURCE_RELEASE_V4,
+		&WCP_RESOURCE_RELEASE_CALLOUT_V4,
+		deviceObject,
+		&g_ResourceReleaseV4
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_RELEASE_CALLOUT_V4 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	status = WCP_RegisterCallout(
+		&FWPM_LAYER_ALE_RESOURCE_RELEASE_V6,
+		&WCP_RESOURCE_RELEASE_CALLOUT_V6,
+		deviceObject,
+		&g_ResourceReleaseV6
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_RegisterCallout_RELEASE_CALLOUT_V6 failed with status: 0x%0x\n", status);
+		goto Exit;
+	}
+
+	// -----------------
 
 	status = FwpmTransactionCommit(gWdmDevice);
 	if (!NT_SUCCESS(status)) {
@@ -688,88 +930,53 @@ void WCP_UnregisterCallouts() {
 		FwpmEngineClose(gWdmDevice);
 		gWdmDevice = INVALID_HANDLE_VALUE;
 
-		if (g_OutboundIPPacketV4) {
-			FwpsCalloutUnregisterById(g_OutboundIPPacketV4);
+		if (g_OutboundTransportV4) {
+			FwpsCalloutUnregisterById(g_OutboundTransportV4);
 		}
-		if (g_OutboundIPPacketV6) {
-			FwpsCalloutUnregisterById(g_OutboundIPPacketV6);
+		if (g_OutboundTransportV6) {
+			FwpsCalloutUnregisterById(g_OutboundTransportV6);
 		}
-		if (g_InboundIPPacketV4) {
-			FwpsCalloutUnregisterById(g_InboundIPPacketV4);
+		if (g_InboundTransportV4) {
+			FwpsCalloutUnregisterById(g_InboundTransportV4);
 		}
-		if (g_InboundIPPacketV6) {
-			FwpsCalloutUnregisterById(g_InboundIPPacketV6);
+		if (g_InboundTransportV6) {
+			FwpsCalloutUnregisterById(g_InboundTransportV6);
 		}
+		// ------- for process ID
+		if (g_AuthConnectV4) {
+			FwpsCalloutUnregisterById(g_AuthConnectV4);
+		}
+		if (g_AuthConnectV6) {
+			FwpsCalloutUnregisterById(g_AuthConnectV6);
+		}
+		if (g_RecvAcceptV4) {
+			FwpsCalloutUnregisterById(g_RecvAcceptV4);
+		}
+		if (g_RecvAcceptV6) {
+			FwpsCalloutUnregisterById(g_RecvAcceptV6);
+		}
+		if (g_ResourceAssignmentV4) {
+			FwpsCalloutUnregisterById(g_ResourceAssignmentV4);
+		}
+		if (g_ResourceAssignmentV6) {
+			FwpsCalloutUnregisterById(g_ResourceAssignmentV6);
+		}
+		if (g_EndpointClosureV4) {
+			FwpsCalloutUnregisterById(g_EndpointClosureV4);
+		}
+		if (g_EndpointClosureV6) {
+			FwpsCalloutUnregisterById(g_EndpointClosureV6);
+		}
+		if (g_ResourceReleaseV4) {
+			FwpsCalloutUnregisterById(g_ResourceReleaseV4);
+		}
+		if (g_ResourceReleaseV6) {
+			FwpsCalloutUnregisterById(g_ResourceReleaseV6);
+		}
+		// -------
 	}
-
 
 }
-
-NTSTATUS WCP_InitInjectionHandles() {
-	/* ++
-
-	Open injection handles (IPv4 and IPv6) for use with the various injection APIs.
-
-	injection handles will be removed during DriverUnload.
-
-	-- */
-
-	NTSTATUS status = STATUS_SUCCESS;
-
-	status = FwpsInjectionHandleCreate(AF_INET,
-		FWPS_INJECTION_TYPE_NETWORK,
-		&g_InjectionHandle_IPv4);
-	if (status != STATUS_SUCCESS) {
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpsInjectionHandleCreate failed with status: 0x%0x\n", status);
-		return status;
-	}
-
-	status = FwpsInjectionHandleCreate(AF_INET6,
-		FWPS_INJECTION_TYPE_NETWORK,
-		&g_InjectionHandle_IPv6);
-	if (status != STATUS_SUCCESS){
-		DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "FwpsInjectionHandleCreate failed with status: 0x%0x\n", status);
-		return status;
-	}
-
-
-	return status;
-}
-
-NTSTATUS
-WCP_FreeInjectionHandles() {
-	/* ++
-
-	Free injection handles (IPv4 and IPv6).
-
-	-- */
-	NTSTATUS status = STATUS_SUCCESS;
-
-
-	if (g_InjectionHandle_IPv4 != INVALID_HANDLE_VALUE) {
-		status = FwpsInjectionHandleDestroy(g_InjectionHandle_IPv4);
-
-		if (status != STATUS_SUCCESS) {
-			return status;
-		}
-
-		g_InjectionHandle_IPv4 = INVALID_HANDLE_VALUE;
-	}
-
-	if (g_InjectionHandle_IPv6 != INVALID_HANDLE_VALUE) {
-		status = FwpsInjectionHandleDestroy(g_InjectionHandle_IPv6);
-
-		if (status != STATUS_SUCCESS) {
-			return status;
-		}
-
-		g_InjectionHandle_IPv6 = INVALID_HANDLE_VALUE;
-	}
-
-
-	return status;
-}
-
 
 _Function_class_(EVT_WDF_DRIVER_UNLOAD)
 _IRQL_requires_same_
@@ -782,8 +989,6 @@ WCP_DriverUnload(
 	UNREFERENCED_PARAMETER(driver);
 
 	WCP_UnregisterCallouts();
-	WCP_FreeInjectionHandles();
-
 
 }
 
@@ -856,11 +1061,6 @@ WCP_IoDeviceControl(
 	case IOCTL_START_CAPTURE:
 		if (!callbacksInitialized) {
 			callbacksInitialized = TRUE;
-			status = WCP_InitInjectionHandles();
-			if (!NT_SUCCESS(status)) {
-				DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "WCP_InitInjectionHandles failed\n");
-				break;
-			}
 			status = WCP_RegisterCallouts(gWdmDevice);
 		}
 		captureRunning = TRUE;
@@ -1031,6 +1231,11 @@ DriverEntry(
 	if (!NT_SUCCESS(status)) {
 		goto Exit;
 	}
+
+	// init spinlock
+	KeInitializeSpinLock(&gProcessIdListLock);
+	// init processIdListHead
+	processIdListHead.SingleListEntry.Next = NULL;
 
 
 Exit:

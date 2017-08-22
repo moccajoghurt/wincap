@@ -150,7 +150,6 @@ VOID sendIoctlNotification(VOID (*callbackFunc)(NETWORK_PACKET)) {
 BOOL createNetworkPacket(PNETWORK_PACKET p, void* packetBuffer, DWORD dwBytesRead) {
 	
 	if (dwBytesRead == 0) {
-		printf("discarding packet\n");
 		return FALSE;
 	}
 	

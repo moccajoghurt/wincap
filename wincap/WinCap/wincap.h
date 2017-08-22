@@ -53,7 +53,7 @@ typedef struct _PACKET_INFO {
 	UINT8            Protocol;       // IP protocol for this packet
 	IP_ADDRESS       SrcIp;          // Source IP address for outbound packets
 	IP_ADDRESS       DstIp;          // Destination IP address for outbound packets
-	UCHAR			 Inbound;		 // True if packet is inbound
+	BOOL			 Inbound;		 // True if packet is inbound
 }PACKET_INFO;
 
 void WCP_InboundCallout(

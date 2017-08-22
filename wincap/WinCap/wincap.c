@@ -102,7 +102,8 @@ NTSTATUS WCP_ShareNetBufferList(PACKET_INFO* packetInfo) {
 	}
 
 	// is inbound?
-	NdisMoveMemory(pDst, &packetInfo->Inbound, 1);
+	UCHAR isInbound = packetInfo->Inbound ? 1 : 0;
+	NdisMoveMemory(pDst, &isInbound, 1);
 	BytesRemaining -= 1;
 	pDst += 1;
 
@@ -239,6 +240,19 @@ void WCP_InboundCallout(
 		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv6 port: %d\n", packetInfo.Port);
 		//DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "ipv6 protocol: %d\n", packetInfo.Protocol);
 	}
+
+	// ---------- not enough tests, keep an eye on this
+	if (packetInfo.AddressFamily == AF_INET) {
+		packetInfo.DstIp.AsUInt32 = RtlUlongByteSwap(inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_LOCAL_ADDRESS].value.uint32);
+		packetInfo.SrcIp.AsUInt32 = RtlUlongByteSwap(inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V4_IP_REMOTE_ADDRESS].value.uint32);
+	}
+	else {
+
+		// FWPS_FIELD_OUTBOUND_TRANSPORT_V6_IP_LOCAL_ADDRESS returns the pointer value 0x01. only occurs when using IPPACKET instead of TRANSPORT
+		RtlCopyMemory(packetInfo.DstIp.AsUInt8, inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V6_IP_LOCAL_ADDRESS].value.byteArray16->byteArray16, 16);
+		RtlCopyMemory(packetInfo.SrcIp.AsUInt8, inFixedValues->incomingValue[FWPS_FIELD_INBOUND_TRANSPORT_V6_IP_REMOTE_ADDRESS].value.byteArray16->byteArray16, 16);
+	}
+	// ----------
 
 	// Get IP and transport header sizes
 	if (FWPS_IS_METADATA_FIELD_PRESENT(inMetaValues, FWPS_METADATA_FIELD_TRANSPORT_HEADER_SIZE)) {

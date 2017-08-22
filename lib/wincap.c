@@ -43,46 +43,48 @@ VOID debugPrintRawBytes(PNETWORK_PACKET p) {
 */
 
 VOID printPacketInfo(PNETWORK_PACKET p) {
+	// printf("%x\n", p->isInbound);
 	if (p->isInbound) {
-		
 		printf("inbound package\n");
+		
 	}
 	else {
+		return;
 		printf("outbound package\n");
 	}
-	if (p->isIpv4 && !p->isInbound) {
-		int block;
+	if (p->isIpv4 /* && !p->isInbound*/) {
+		UINT32 block;
 		printf("Source IP: ");
-		printf("%d.", p->sourceIpv4 >> 24);
-		block = p->sourceIpv4;
-		block <<= 8;
-		block >>= 24;
-		printf("%d.", block);
-		block = p->sourceIpv4;
-		block <<= 16;
-		block >>= 24;
-		printf("%d.", block);
 		block = p->sourceIpv4;
 		block <<= 24;
 		block >>= 24;
-		printf("%d\n", block);
+		printf("%u.", block);
+		block = p->sourceIpv4;
+		block <<= 16;
+		block >>= 24;
+		printf("%u.", block);
+		block = p->sourceIpv4;
+		block <<= 8;
+		block >>= 24;
+		printf("%u.", block);
+		printf("%u\n", p->sourceIpv4 >> 24);
 		
 		printf("Target IP: ");
-		printf("%d.", p->targetIpv4 >> 24);
-		block = p->targetIpv4;
-		block <<= 8;
-		block >>= 24;
-		printf("%d.", block);
-		block = p->targetIpv4;
-		block <<= 16;
-		block >>= 24;
-		printf("%d.", block);
 		block = p->targetIpv4;
 		block <<= 24;
 		block >>= 24;
-		printf("%d\n", block);
+		printf("%u.", block);
+		block = p->targetIpv4;
+		block <<= 16;
+		block >>= 24;
+		printf("%u.", block);
+		block = p->targetIpv4;
+		block <<= 8;
+		block >>= 24;
+		printf("%u.", block);
+		printf("%u\n", p->targetIpv4 >> 24);
 	}
-	else if (!p->isIpv4 && !p->isInbound) {
+	else if (!p->isIpv4/* && !p->isInbound*/) {
 		printf("Source IP: ");
 		for (int i = 0; i < 16; i++) {
 			printf("%hhX", p->sourceIpv6[i]);
@@ -101,10 +103,7 @@ VOID printPacketInfo(PNETWORK_PACKET p) {
 		}
 		printf("\n");
 	}
-	else {
-		printf("Source IP: localhost\n");
-		printf("Target IP: localhost\n");
-	}
+	
 	printf("port: %d\n", p->port);
 	printf("protocol: %d\n", p->protocol);
 	printf("process id: %d\n", p->processId);
@@ -151,21 +150,22 @@ VOID sendIoctlNotification(VOID (*callbackFunc)(NETWORK_PACKET)) {
 BOOL createNetworkPacket(PNETWORK_PACKET p, void* packetBuffer, DWORD dwBytesRead) {
 	
 	if (dwBytesRead == 0) {
+		printf("discarding packet\n");
 		return FALSE;
 	}
 	
 	UINT32 ptrOffset = 0;
-	BOOL* bPtr;
+	UCHAR* ucharPtr;
 	UINT8* uint8Ptr;
 	UINT16* uint16Ptr;
 	UINT32* uint32Ptr;
 	
-	bPtr = (BOOL*)((BYTE*)packetBuffer + ptrOffset);
-	p->isInbound = *bPtr;
+	ucharPtr = (UCHAR*)((BYTE*)packetBuffer + ptrOffset);
+	p->isInbound = *ucharPtr;
 	ptrOffset += 1;
 	
-	bPtr = (BOOL*)((BYTE*)packetBuffer + ptrOffset);
-	p->isIpv4 = *bPtr;
+	ucharPtr = (UCHAR*)((BYTE*)packetBuffer + ptrOffset);
+	p->isIpv4 = *ucharPtr;
 	ptrOffset += 1;
 	
 	if (p->isIpv4) {

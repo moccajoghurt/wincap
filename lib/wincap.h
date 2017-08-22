@@ -15,8 +15,8 @@
 //------------------- Global 
 typedef struct _NETWORK_PACKET {
 	// ---- packet info
-	BOOL 	isInbound;
-	BOOL 	isIpv4;
+	UCHAR 	isInbound;
+	UCHAR 	isIpv4;
 	UINT32	sourceIpv4;     // IPv4
 	UINT32	targetIpv4;     // IPv4
 	UINT8	sourceIpv6[16];  // IPv6
